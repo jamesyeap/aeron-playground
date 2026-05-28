@@ -3,6 +3,7 @@ import io.aeron.ChannelUri;
 import io.aeron.Subscription;
 import io.aeron.archive.client.AeronArchive;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
+import io.aeron.archive.client.ReplayParams;
 import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.collections.MutableLong;
 import org.agrona.concurrent.BackoffIdleStrategy;
@@ -14,6 +15,8 @@ import java.util.concurrent.TimeUnit;
  * A simple subscriber that connects to a channel, subscribes to a stream, and prints all messages received from the stream.
  */
 public class Subscriber {
+    private static final int REPLAY_STREAM_ID = 61;
+
     public static void main(String[] args) throws InterruptedException {
         // get configs
         //  -DaeronPlayground.dir=/tmp/media-driver-1
@@ -58,11 +61,6 @@ public class Subscriber {
                 System.out.format("Received message: %s\n", message);
             };
 
-            MutableLong lastRecordingId = new MutableLong();
-            RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
-                lastRecordingId.set(recordingId);
-            };
-
             if (!shouldReplay) {
                 // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
                 while (!subscription.isConnected()) {
@@ -73,16 +71,22 @@ public class Subscriber {
                 subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
 
             } else {
+                MutableLong lastRecordingId = new MutableLong();
+                RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
+                    lastRecordingId.set(recordingId);
+                };
+
+                // list the recordings that the archiver has for the channel and stream
                 final int foundCount = archive.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
                 if (foundCount == 0) {
                     // if there were no replay recordings, just subscribe as usual
                     subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
 
                 } else {
-                    // otherwise, request replay
-                    final long sessionId = archive.startReplay(lastRecordingId.get(), 0L, Long.MAX_VALUE, aeronChannel, aeronStream);
+                    // otherwise, request the archiver to start replaying on the given channel and stream
+                    final long sessionId = archive.startReplay(lastRecordingId.get(), AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, REPLAY_STREAM_ID);
                     String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
-                    Subscription replaySubscription = aeron.addSubscription(replayChannel, aeronStream);
+                    Subscription replaySubscription = aeron.addSubscription(replayChannel, REPLAY_STREAM_ID);
 
                     // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
                     while (!replaySubscription.isConnected()) {
