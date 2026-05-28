@@ -11,9 +11,13 @@ import java.util.concurrent.TimeUnit;
  */
 public class Subscriber {
     public static void main(String[] args) throws InterruptedException {
-        // specify this with example below:
+        // get configs
         //  -DaeronPlayground.dir=/tmp/media-driver-1
         String aeronDir = System.getProperty("aeronPlayground.dir");
+        //  -DaeronPlayground.channel="aeron:ipc"
+        String aeronChannel = System.getProperty("aeronPlayground.channel");
+        //  -DaeronPlayground.stream="51"
+        int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
 
         // create the configuration
         final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
@@ -21,7 +25,7 @@ public class Subscriber {
         IdleStrategy idleStrategy = new BackoffIdleStrategy(100, 10, TimeUnit.SECONDS.toNanos(1), TimeUnit.SECONDS.toNanos(10));
 
         // connect to the media driver using the configuration
-        try (final Aeron aeron = Aeron.connect(ctx); final Subscription subscription = aeron.addSubscription("aeron:ipc", 51)) {
+        try (final Aeron aeron = Aeron.connect(ctx); final Subscription subscription = aeron.addSubscription(aeronChannel, aeronStream)) {
 
             /*
             while (!subscription.isConnected()) {

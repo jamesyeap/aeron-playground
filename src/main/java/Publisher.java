@@ -11,9 +11,13 @@ import java.util.concurrent.TimeUnit;
  */
 public class Publisher {
     public static void main(String[] args) throws InterruptedException {
-        // specify this with example below:
+        // get configs
         //  -DaeronPlayground.dir=/tmp/media-driver-1
         String aeronDir = System.getProperty("aeronPlayground.dir");
+        //  -DaeronPlayground.channel="aeron:ipc"
+        String aeronChannel = System.getProperty("aeronPlayground.channel");
+        //  -DaeronPlayground.stream="51"
+        int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
 
         // create the buffer that we will write messages to
         UnsafeBuffer buffer = new UnsafeBuffer(BufferUtil.allocateDirectAligned(512, BitUtil.CACHE_LINE_LENGTH));

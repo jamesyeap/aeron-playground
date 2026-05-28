@@ -18,6 +18,8 @@ ${JAVA_HOME}/bin/java \
     -XX:GuaranteedSafepointInterval=300000 \
     -XX:+UseParallelGC \
     -DaeronPlayground.dir=${AERON_DIR} \
+    -DaeronPlayground.channel="aeron:ipc" \
+    -DaeronPlayground.stream="51" \
     ${ADD_OPENS} \
     Subscriber
 
