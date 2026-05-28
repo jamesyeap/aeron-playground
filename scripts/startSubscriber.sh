@@ -17,6 +17,10 @@ ${JAVA_HOME}/bin/java \
     -DaeronPlayground.dir=${AERON_DIR} \
     -DaeronPlayground.channel=${AERON_CHANNEL} \
     -DaeronPlayground.stream=${AERON_STREAM} \
+    -DaeronPlayground.controlRequestChannel="aeron:udp?endpoint=localhost:8010" \
+    -DaeronPlayground.controlRequestStream="52" \
+    -DaeronPlayground.controlResponseChannel="aeron:udp?endpoint=localhost:0" \
+    -DaeronPlayground.controlResponseStream="53" \
     ${ADD_OPENS} \
     ${VM_OPTIONS} \
     Subscriber
