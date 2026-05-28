@@ -10,7 +10,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # === START ===
 source "${SCRIPT_DIR}/common.sh"
 
-${JAVA_HOME}/bin/java \
+exec ${JAVA_HOME}/bin/java \
     -cp "${REPO_ROOT}/build/libs/aeron-playground-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}" \
     -DaeronPlayground.dir=${AERON_DIR} \
     ${ADD_OPENS} \
