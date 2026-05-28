@@ -31,9 +31,10 @@ public class Publisher {
                 Thread.sleep(TimeUnit.SECONDS.toMillis(1));
             }
 
+            int count = 0;
             while (true) {
                 // put the message into the buffer
-                String message = "Hello";
+                String message = String.format("Count: %d", count);
                 byte[] messageBytes = message.getBytes();
                 buffer.putBytes(0, messageBytes);
 
@@ -46,7 +47,8 @@ public class Publisher {
                     printError(position);
                 } else {
                     // otherwise, that means the buffer was successfully published
-                    System.out.println("Message successfully published");
+                    System.out.format("Message successfully published: %s\n", message);
+                    count++;
                 }
 
                 // wait for 1 second before publishing the next message
