@@ -1,3 +1,4 @@
+import io.aeron.archive.client.AeronArchive;
 import io.aeron.driver.MediaDriver;
 import io.aeron.driver.ThreadingMode;
 import org.agrona.concurrent.BusySpinIdleStrategy;
@@ -9,7 +10,6 @@ import org.agrona.concurrent.BusySpinIdleStrategy;
  */
 public class StartMediaDriver {
     public static void main(String[] args) {
-        // specify this with example below:
         //  -DaeronPlayground.dir=/tmp/media-driver-1
         String aeronDir = System.getProperty("aeronPlayground.dir");
 
@@ -23,7 +23,6 @@ public class StartMediaDriver {
         // the `close()` method of the MediaDriver can automatically run after this block is exited - see `AutoClosable`
         try (final MediaDriver mediaDriver = MediaDriver.launch(mediaDriverCtx)) {
             System.out.format("Media driver started! Aeron directory: %s\n", aeronDir);
-
             Runtime.getRuntime().addShutdownHook(new Thread(() -> System.out.format("Shutting down media driver - Aeron directory: %s\n", aeronDir)));
 
             // to prevent shutdown

@@ -1,5 +1,7 @@
 import io.aeron.Aeron;
 import io.aeron.Publication;
+import io.aeron.archive.client.AeronArchive;
+import io.aeron.archive.codecs.SourceLocation;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.concurrent.UnsafeBuffer;
@@ -19,21 +21,46 @@ public class Publisher {
         //  -DaeronPlayground.stream="51"
         int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
 
+        // configs to connect to Aeron Archive
+        String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
+        int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
+        String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
+        int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
+
         // create the buffer that we will write messages to
         UnsafeBuffer buffer = new UnsafeBuffer(BufferUtil.allocateDirectAligned(512, BitUtil.CACHE_LINE_LENGTH));
 
         // create the configuration
         final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
 
+        // create the config for the client to Aeron archive
+        AeronArchive.Context archiveCtx = new AeronArchive.Context()
+                .aeronDirectoryName(aeronDir)
+                .controlRequestChannel(controlRequestChannel)
+                .controlRequestStreamId(controlRequestStream)
+                .controlResponseChannel(controlResponseChannel)
+                .controlResponseStreamId(controlResponseStream);
+
         // connect to the media driver using the configuration
         try (final Aeron aeron = Aeron.connect(ctx);
-             final Publication publication = aeron.addPublication(aeronChannel, aeronStream)) {
+             final Publication publication = aeron.addPublication(aeronChannel, aeronStream);
+             final AeronArchive archiveClient = AeronArchive.connect(archiveCtx)
+             // final Publication publication = archiveClient.addRecordedPublication(aeronChannel, aeronStream);
+        ) {
 
             // wait for a subscriber to connect
             while (!publication.isConnected()) {
                 System.out.println("Waiting for subscriber...");
                 Thread.sleep(TimeUnit.SECONDS.toMillis(1));
             }
+
+            // request for Aeron Archive to start recording
+            long subscriptionId = archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
+            // when the publisher shuts down, request the archive client to stop recording
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.format("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", subscriptionId);
+                archiveClient.stopRecording(subscriptionId);
+            }));
 
             int count = 0;
             while (true) {

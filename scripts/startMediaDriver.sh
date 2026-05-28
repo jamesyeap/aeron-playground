@@ -12,13 +12,9 @@ source "${SCRIPT_DIR}/common.sh"
 
 ${JAVA_HOME}/bin/java \
     -cp "${REPO_ROOT}/build/libs/aeron-playground-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}" \
-    -XX:+UnlockExperimentalVMOptions \
-    -XX:+TrustFinalNonStaticFields \
-    -XX:+UnlockDiagnosticVMOptions \
-    -XX:GuaranteedSafepointInterval=300000 \
-    -XX:+UseParallelGC \
     -DaeronPlayground.dir=${AERON_DIR} \
     ${ADD_OPENS} \
+    ${VM_OPTIONS} \
     StartMediaDriver
 
 # -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5104 \
