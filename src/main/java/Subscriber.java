@@ -4,7 +4,6 @@ import io.aeron.Subscription;
 import io.aeron.archive.client.AeronArchive;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
 import io.aeron.logbuffer.FragmentHandler;
-import org.agrona.collections.MutableInteger;
 import org.agrona.collections.MutableLong;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
@@ -25,6 +24,7 @@ public class Subscriber {
         int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
 
         // configs to connect to Aeron Archive
+        boolean shouldReplay = Boolean.parseBoolean(System.getProperty("aeronPlayground.shouldReplay", "false"));
         String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
         int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
         String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
@@ -49,12 +49,6 @@ public class Subscriber {
              final AeronArchive archive = AeronArchive.connect(archiveCtx)
         ) {
 
-            // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
-            while (!subscription.isConnected()) {
-                System.out.println("Waiting for publisher...");
-                Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-            }
-
             FragmentHandler fragmentHandler = (buffer, offset, length, header) -> {
                 // copy the bytes from over to a new buffer -> TODO: do we need to do this?
                 byte[] messageBytes = new byte[length];
@@ -68,35 +62,59 @@ public class Subscriber {
             RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
                 lastRecordingId.set(recordingId);
             };
-            // final int foundCount = archive.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
-            final int foundCount = 0;
-            if (foundCount == 0) {
-                // if there were no replay recordings:
-                while (true) {
-                    final int numFragmentsRead = subscription.poll(fragmentHandler, fragmentLimit);
 
-                    // idle before polling again
-                    idleStrategy.idle(numFragmentsRead);
-                }
-            } else {
-                // otherwise, request replay
-                final long sessionId = archive.startReplay(lastRecordingId.get(), 0L, Long.MAX_VALUE, aeronChannel, aeronStream);
-                String replayChannel = ChannelUri.addSessionId(aeronChannel, (int)sessionId);
-                Subscription replaySubscription = aeron.addSubscription(replayChannel, aeronStream);
-
+            if (!shouldReplay) {
                 // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
-                while (!replaySubscription.isConnected()) {
-                    System.out.println("Waiting for replay subscription...");
+                while (!subscription.isConnected()) {
+                    System.out.println("Waiting for publisher...");
                     Thread.sleep(TimeUnit.SECONDS.toMillis(1));
                 }
 
-                while (true) {
-                    final int numFragmentsRead = replaySubscription.poll(fragmentHandler, fragmentLimit);
+                subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
 
-                    // idle before polling again
-                    idleStrategy.idle(numFragmentsRead);
+            } else {
+                final int foundCount = archive.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
+                if (foundCount == 0) {
+                    // if there were no replay recordings, just subscribe as usual
+                    subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
+
+                } else {
+                    // otherwise, request replay
+                    final long sessionId = archive.startReplay(lastRecordingId.get(), 0L, Long.MAX_VALUE, aeronChannel, aeronStream);
+                    String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
+                    Subscription replaySubscription = aeron.addSubscription(replayChannel, aeronStream);
+
+                    // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
+                    while (!replaySubscription.isConnected()) {
+                        System.out.println("Waiting for replay subscription...");
+                        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+                    }
+
+                    replay(replaySubscription, fragmentHandler, fragmentLimit, idleStrategy);
+                    subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
                 }
             }
+        }
+    }
+
+    private static void subscribe(Subscription subscription, FragmentHandler fragmentHandler, int fragmentLimit, IdleStrategy idleStrategy) {
+        while (true) {
+            final int numFragmentsRead = subscription.poll(fragmentHandler, fragmentLimit);
+
+            // idle before polling again
+            idleStrategy.idle(numFragmentsRead);
+        }
+    }
+
+    private static void replay(Subscription subscription, FragmentHandler fragmentHandler, int fragmentLimit, IdleStrategy idleStrategy) {
+        while (true) {
+            final int numFragmentsRead = subscription.poll(fragmentHandler, fragmentLimit);
+            if (numFragmentsRead == 0) {
+                break;
+            }
+
+            // idle before polling again
+            idleStrategy.idle(numFragmentsRead);
         }
     }
 }
