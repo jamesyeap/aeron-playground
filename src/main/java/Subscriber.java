@@ -27,12 +27,11 @@ public class Subscriber {
         // connect to the media driver using the configuration
         try (final Aeron aeron = Aeron.connect(ctx); final Subscription subscription = aeron.addSubscription(aeronChannel, aeronStream)) {
 
-            /*
+            // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
             while (!subscription.isConnected()) {
                 System.out.println("Waiting for publisher...");
                 Thread.sleep(TimeUnit.SECONDS.toMillis(1));
             }
-            */
 
             FragmentHandler fragmentHandler = (buffer, offset, length, header) -> {
                 // copy the bytes from over to a new buffer -> TODO: do we need to do this?

@@ -27,7 +27,7 @@ public class Publisher {
 
         // connect to the media driver using the configuration
         try (final Aeron aeron = Aeron.connect(ctx);
-             final Publication publication = aeron.addPublication("aeron:ipc", 51)) {
+             final Publication publication = aeron.addPublication(aeronChannel, aeronStream)) {
 
             // wait for a subscriber to connect
             while (!publication.isConnected()) {
