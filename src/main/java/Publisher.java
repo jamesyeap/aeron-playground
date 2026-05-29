@@ -9,13 +9,11 @@ import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.collections.MutableInteger;
-import org.agrona.collections.MutableLong;
 import org.agrona.concurrent.BusySpinIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
 import org.agrona.concurrent.UnsafeBuffer;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -65,7 +63,7 @@ public class Publisher {
             // get all the past messages that it has published thus far
             System.out.println("Fetching all past messages sent...");
             List<Long> recordingIDList = getListOfRecordings(archiveClient, aeronChannel, aeronStream);
-            for (Long recordingID: recordingIDList) {
+            for (Long recordingID : recordingIDList) {
                 count = startReplay(recordingID, aeron, archiveClient, aeronChannel, aeronStream);
             }
 
@@ -76,7 +74,10 @@ public class Publisher {
             }
 
             // request for Aeron Archive to start recording
-            long subscriptionId = archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
+            long subscriptionId = recordingIDList.isEmpty()
+                    ? archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE)
+                    : archiveClient.extendRecording(recordingIDList.getLast(), aeronChannel, aeronStream, SourceLocation.REMOTE);
+
             // when the publisher shuts down, request the archive client to stop recording
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.format("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", subscriptionId);
@@ -160,7 +161,7 @@ public class Publisher {
             Integer lastCount = Integer.parseInt(lastCountString, 10);
             // System.out.format("lastCount: %d\n", lastCount);
             if (latestCount.get() < lastCount) {
-               latestCount.set(lastCount);
+                latestCount.set(lastCount);
             }
         };
 
