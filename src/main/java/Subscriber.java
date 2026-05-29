@@ -71,20 +71,16 @@ public class Subscriber {
                 subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
 
             } else {
-                MutableLong lastRecordingId = new MutableLong();
-                RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
-                    lastRecordingId.set(recordingId);
-                };
+                long lastRecordingId = getLastRecordingId(archive, aeronChannel, aeronStream);
+                System.out.format("Last recording ID: %d\n", lastRecordingId);
 
-                // list the recordings that the archiver has for the channel and stream
-                final int foundCount = archive.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
-                if (foundCount == 0) {
+                if (lastRecordingId == -1) {
                     // if there were no replay recordings, just subscribe as usual
                     subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
 
                 } else {
                     // otherwise, request the archiver to start replaying on the given channel and stream
-                    final long sessionId = archive.startReplay(lastRecordingId.get(), AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, REPLAY_STREAM_ID);
+                    final long sessionId = archive.startReplay(lastRecordingId, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, REPLAY_STREAM_ID);
                     String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
                     Subscription replaySubscription = aeron.addSubscription(replayChannel, REPLAY_STREAM_ID);
 
@@ -120,5 +116,20 @@ public class Subscriber {
             // idle before polling again
             idleStrategy.idle(numFragmentsRead);
         }
+    }
+
+    private static long getLastRecordingId(AeronArchive archiveClient, String aeronChannel, int aeronStream) {
+        MutableLong lastRecordingId = new MutableLong();
+        RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
+            lastRecordingId.set(recordingId);
+        };
+
+        // list the recordings that the archiver has for the channel and stream
+        final int foundCount = archiveClient.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
+        if (foundCount == 0) {
+            return -1;
+        }
+
+        return lastRecordingId.get();
     }
 }
