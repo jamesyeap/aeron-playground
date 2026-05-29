@@ -1,10 +1,5 @@
 import io.aeron.archive.Archive;
 import io.aeron.archive.ArchiveThreadingMode;
-import io.aeron.archive.ArchivingMediaDriver;
-import io.aeron.archive.client.AeronArchive;
-import io.aeron.driver.MediaDriver;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * A simple class that records all messages from a given channel and stream.

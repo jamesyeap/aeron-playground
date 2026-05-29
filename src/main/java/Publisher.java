@@ -60,6 +60,7 @@ public class Publisher {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.format("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", subscriptionId);
                 archiveClient.stopRecording(subscriptionId);
+                System.out.println("Publisher shut down");
             }));
 
             int count = 0;
