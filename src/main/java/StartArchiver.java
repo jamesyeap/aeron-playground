@@ -1,11 +1,12 @@
 import io.aeron.archive.Archive;
 import io.aeron.archive.ArchiveThreadingMode;
+import org.agrona.CloseHelper;
 
 /**
  * A simple class that records all messages from a given channel and stream.
  */
 public class StartArchiver {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         String aeronDir = System.getProperty("aeronPlayground.dir");
         String archiveDir = System.getProperty("aeronPlayground.archiveDir");
         String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
@@ -28,6 +29,7 @@ public class StartArchiver {
 
             // busy spin to stop exiting
             while (true) {
+                Thread.sleep(100);
             }
         }
     }

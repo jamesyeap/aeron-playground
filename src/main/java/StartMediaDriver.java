@@ -9,7 +9,7 @@ import org.agrona.concurrent.BusySpinIdleStrategy;
  * We're running the MediaDriver as a stand-alone process - although it can also be embedded into the same process as one of the applications.
  */
 public class StartMediaDriver {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         //  -DaeronPlayground.dir=/tmp/media-driver-1
         String aeronDir = System.getProperty("aeronPlayground.dir");
 
@@ -27,6 +27,7 @@ public class StartMediaDriver {
 
             // to prevent shutdown
             while (true) {
+                Thread.sleep(100);
             }
         }
     }
