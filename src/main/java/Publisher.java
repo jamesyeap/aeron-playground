@@ -9,9 +9,7 @@ import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.collections.MutableInteger;
-import org.agrona.concurrent.BusySpinIdleStrategy;
-import org.agrona.concurrent.IdleStrategy;
-import org.agrona.concurrent.UnsafeBuffer;
+import org.agrona.concurrent.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,56 +19,76 @@ import java.util.concurrent.TimeUnit;
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
  */
 public class Publisher {
+
     private static final int REPLAY_STREAM_ID = 53;
 
-    public static void main(String[] args) throws InterruptedException {
-        // get configs
-        //  -DaeronPlayground.dir=/tmp/media-driver-1
-        String aeronDir = System.getProperty("aeronPlayground.dir");
-        //  -DaeronPlayground.channel="aeron:ipc"
-        String aeronChannel = System.getProperty("aeronPlayground.channel");
-        //  -DaeronPlayground.stream="51"
-        int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
+    private static final class PublisherAgent implements Agent {
 
-        // configs to connect to Aeron Archive
-        String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
-        int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
-        String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
-        int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
+        CachedEpochClock clock = new CachedEpochClock();
+        private int count = 0;
+        private Aeron aeron;
+        private Publication publication;
+        private AeronArchive archiveClient;
+        private UnsafeBuffer buffer;
 
-        // create the buffer that we will write messages to
-        UnsafeBuffer buffer = new UnsafeBuffer(BufferUtil.allocateDirectAligned(512, BitUtil.CACHE_LINE_LENGTH));
+        @Override
+        public void onStart() {
+            // get configs
+            //  -DaeronPlayground.dir=/tmp/media-driver-1
+            String aeronDir = System.getProperty("aeronPlayground.dir");
+            //  -DaeronPlayground.channel="aeron:ipc"
+            String aeronChannel = System.getProperty("aeronPlayground.channel");
+            //  -DaeronPlayground.stream="51"
+            int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
 
-        // create the configuration
-        final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
+            // configs to connect to Aeron Archive
+            String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
+            int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
+            String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
+            int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
 
-        // create the config for the client to Aeron archive
-        AeronArchive.Context archiveCtx = new AeronArchive.Context()
-                .aeronDirectoryName(aeronDir)
-                .controlRequestChannel(controlRequestChannel)
-                .controlRequestStreamId(controlRequestStream)
-                .controlResponseChannel(controlResponseChannel)
-                .controlResponseStreamId(controlResponseStream);
+            // create the buffer that we will write messages to
+            buffer = new UnsafeBuffer(BufferUtil.allocateDirectAligned(512, BitUtil.CACHE_LINE_LENGTH));
 
-        // connect to the media driver using the configuration
-        try (final Aeron aeron = Aeron.connect(ctx);
-             final Publication publication = aeron.addPublication(aeronChannel, aeronStream);
-             final AeronArchive archiveClient = AeronArchive.connect(archiveCtx)
-             // final Publication publication = archiveClient.addRecordedPublication(aeronChannel, aeronStream);
-        ) {
-            int count = 0;
+            // create the configuration
+            final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
+
+            // create the config for the client to Aeron archive
+            AeronArchive.Context archiveCtx = new AeronArchive.Context()
+                    .aeronDirectoryName(aeronDir)
+                    .controlRequestChannel(controlRequestChannel)
+                    .controlRequestStreamId(controlRequestStream)
+                    .controlResponseChannel(controlResponseChannel)
+                    .controlResponseStreamId(controlResponseStream);
+
+            // connect to the media driver using the configuration
+            aeron = Aeron.connect(ctx);
+            publication = aeron.addPublication(aeronChannel, aeronStream);
+            archiveClient = AeronArchive.connect(archiveCtx);
+            // final Publication publication = archiveClient.addRecordedPublication(aeronChannel, aeronStream);
 
             // get all the past messages that it has published thus far
             System.out.println("Fetching all past messages sent...");
             List<Long> recordingIDList = getListOfRecordings(archiveClient, aeronChannel, aeronStream);
             for (Long recordingID : recordingIDList) {
-                count = startReplay(recordingID, aeron, archiveClient, aeronChannel, aeronStream);
+                try {
+                    count = startReplay(recordingID, aeron, archiveClient, aeronChannel, aeronStream);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
             }
 
             // wait for a subscriber to connect
             while (!publication.isConnected()) {
                 System.out.println("Waiting for subscriber...");
-                Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+
+                try {
+                    Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
             }
 
             // request for Aeron Archive to start recording
@@ -85,29 +103,52 @@ public class Publisher {
                 System.out.println("Publisher shut down");
             }));
 
-            while (true) {
-                // put the message into the buffer
-                String message = Integer.toString(count);
-                byte[] messageBytes = message.getBytes();
-                buffer.putBytes(0, messageBytes);
-
-                // try to publish the buffer contents
-                // this probably puts the contents of the buffer into the shared memory between this application and the media driver
-                final long position = publication.offer(buffer);
-
-                // if the position is negative, that means the buffer was not published
-                if (position < 0L) {
-                    printError(position);
-                } else {
-                    // otherwise, that means the buffer was successfully published
-                    System.out.format("Message successfully published: %s\n", message);
-                    count++;
-                }
-
-                // wait for 1 second before publishing the next message
-                Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-            }
         }
+
+        @Override
+        public int doWork() throws Exception {
+            long currentTime = SystemEpochClock.INSTANCE.time();
+            if (currentTime < clock.time()) {
+                return 0;
+            }
+
+            clock.update(currentTime);
+            clock.advance(TimeUnit.SECONDS.toMillis(1));
+
+            // put the message into the buffer
+            String message = Integer.toString(count);
+            byte[] messageBytes = message.getBytes();
+            buffer.putBytes(0, messageBytes);
+
+            // try to publish the buffer contents
+            // this probably puts the contents of the buffer into the shared memory between this application and the media driver
+            final long position = publication.offer(buffer);
+
+            // if the position is negative, that means the buffer was not published
+            if (position < 0L) {
+                printError(position);
+            } else {
+                // otherwise, that means the buffer was successfully published
+                System.out.format("Message successfully published: %s\n", message);
+                count++;
+            }
+
+            return 1;
+        }
+
+        @Override
+        public String roleName() {
+            return "";
+        }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        IdleStrategy idleStrategy = new BackoffIdleStrategy();
+        AgentRunner agentRunner = new AgentRunner(
+                idleStrategy, Throwable::printStackTrace, null, new PublisherAgent()
+        );
+        Thread thread = AgentRunner.startOnThread(agentRunner);
+        thread.join();
     }
 
     private static void printError(long errorCode) {
