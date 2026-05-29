@@ -1,7 +1,4 @@
-import io.aeron.Aeron;
-import io.aeron.ChannelUri;
-import io.aeron.Publication;
-import io.aeron.Subscription;
+import io.aeron.*;
 import io.aeron.archive.client.AeronArchive;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
 import io.aeron.archive.codecs.SourceLocation;
@@ -9,11 +6,14 @@ import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.collections.MutableInteger;
+import org.agrona.collections.MutableReference;
 import org.agrona.concurrent.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static io.aeron.CommonContext.ENDPOINT_PARAM_NAME;
 
 /**
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
@@ -63,20 +63,45 @@ public class Publisher {
 
             // connect to the media driver using the configuration
             aeron = Aeron.connect(ctx);
-            publication = aeron.addPublication(aeronChannel, aeronStream);
             archiveClient = AeronArchive.connect(archiveCtx);
             // final Publication publication = archiveClient.addRecordedPublication(aeronChannel, aeronStream);
 
             // get all the past messages that it has published thus far
             System.out.println("Fetching all past messages sent...");
-            List<Long> recordingIDList = getListOfRecordings(archiveClient, aeronChannel, aeronStream);
-            for (Long recordingID : recordingIDList) {
+            List<RecordingDetails> recordingIDList = getListOfRecordings(archiveClient, aeronChannel, aeronStream);
+            for (RecordingDetails recordingDetails : recordingIDList) {
                 try {
-                    count = startReplay(recordingID, aeron, archiveClient, aeronChannel, aeronStream);
+                    count = startReplay(recordingDetails.recordingId(), aeron, archiveClient, aeronChannel, aeronStream);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
                 }
+            }
+
+            // request for Aeron Archive to start recording
+            final long recordingId = startOrExtendRecording(recordingIDList, aeronChannel, aeronStream);
+
+            // if there was no previous recording, we can just create a vanilla publication
+            if (recordingIDList.isEmpty()) {
+                publication = aeron.addPublication(aeronChannel, aeronStream);
+
+            } else {
+                // otherwise, we should extend the last recording - to create a publication based on the last recording, we need to do this as we want to extend the last recording, and to do so the publication must match with the recording.
+                RecordingDetails detailsOfLastRecording = recordingIDList.getLast();
+                final ChannelUri recordedUri = ChannelUri.parse(detailsOfLastRecording.originalChannel);
+                final ChannelUriStringBuilder builder = new ChannelUriStringBuilder()
+                        .media(recordedUri)
+                        .initialPosition(detailsOfLastRecording.stopPosition, detailsOfLastRecording.initialTermId, detailsOfLastRecording.termBufferLength)
+                        .mtu(detailsOfLastRecording.mtuLength)
+                        .sessionId(detailsOfLastRecording.sessionId);
+
+                // UDP recordings have an endpoint to carry over; IPC recordings do not.
+                if (null != recordedUri.get(ENDPOINT_PARAM_NAME))
+                {
+                    builder.endpoint(recordedUri);
+                }
+
+                publication = aeron.addExclusivePublication(builder.build(), detailsOfLastRecording.streamId);
             }
 
             // wait for a subscriber to connect
@@ -91,15 +116,22 @@ public class Publisher {
                 }
             }
 
-            // request for Aeron Archive to start recording
-            long subscriptionId = recordingIDList.isEmpty()
-                    ? archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE)
-                    : archiveClient.extendRecording(recordingIDList.getLast(), aeronChannel, aeronStream, SourceLocation.REMOTE);
 
             // when the publisher shuts down, request the archive client to stop recording
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.format("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", subscriptionId);
-                archiveClient.stopRecording(subscriptionId);
+                System.out.format("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", recordingId);
+                archiveClient.stopRecording(recordingId);
+                publication.close();
+
+                while (!publication.isClosed()) {
+                    try {
+                        System.out.format("Waiting for publication to be closed - publication: %s\n", publication);
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+
                 System.out.println("Publisher shut down");
             }));
 
@@ -136,9 +168,17 @@ public class Publisher {
             return 1;
         }
 
+        private long startOrExtendRecording(List<RecordingDetails> recordingIDList, String aeronChannel, int aeronStream) {
+            if (!recordingIDList.isEmpty()) {
+                return archiveClient.extendRecording(recordingIDList.getLast().recordingId(), aeronChannel, aeronStream, SourceLocation.REMOTE);
+            }
+
+            return archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
+        }
+
         @Override
         public String roleName() {
-            return "";
+            return "Publisher";
         }
     }
 
@@ -170,17 +210,17 @@ public class Publisher {
         }
     }
 
-    private static List<Long> getListOfRecordings(AeronArchive archiveClient, String aeronChannel, int aeronStream) {
-        List<Long> recordingIdList = new ArrayList<>();
+    private static List<RecordingDetails> getListOfRecordings(AeronArchive archiveClient, String aeronChannel, int aeronStream) {
+        List<RecordingDetails> recordingDetailsList = new ArrayList<>();
 
         RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
-            recordingIdList.add(recordingId);
+            recordingDetailsList.add(new RecordingDetails(controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity));
         };
 
         // look through all the recordings that the archiver has for the channel and stream
         archiveClient.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
 
-        return recordingIdList;
+        return recordingDetailsList;
     }
 
     private static int startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int aeronStream) throws InterruptedException {
@@ -221,5 +261,24 @@ public class Publisher {
         }
 
         return latestCount.get();
+    }
+
+    private record RecordingDetails(
+            long controlSessionId,
+            long correlationId,
+            long recordingId,
+            long startTimestamp,
+            long stopTimestamp,
+            long startPosition,
+            long stopPosition,
+            int initialTermId,
+            int segmentFileLength,
+            int termBufferLength,
+            int mtuLength,
+            int sessionId,
+            int streamId,
+            String strippedChannel,
+            String originalChannel,
+            String sourceIdentity) {
     }
 }
