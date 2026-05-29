@@ -3,8 +3,7 @@ AERON_JAR="/Users/jamesyeap/Developer/java/aeron/aeron-all/build/libs/aeron-all-
 ADD_OPENS="--add-opens java.base/jdk.internal.misc=ALL-UNNAMED"
 
 # === CONFIG ===
-AERON_DIR="/tmp/media-driver-1"
-PROGRAM=${AERON_STAT}
+AERON_DIR=$1; shift
 
 java \
   -cp ${AERON_JAR} \

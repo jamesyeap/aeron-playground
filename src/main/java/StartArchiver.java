@@ -15,7 +15,6 @@ public class StartArchiver {
         String archiveDir = System.getProperty("aeronPlayground.archiveDir");
         String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
         int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
-        // String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
         String replicationChannel = System.getProperty("aeronPlayground.replicationChannel");
 
         Archive.Context ctx = new Archive.Context()
