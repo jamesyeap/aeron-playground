@@ -12,7 +12,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
 exec ${JAVA_HOME}/bin/java \
-    -cp "${REPO_ROOT}/build/libs/aeron-playground-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}" \
+    -cp "${REPO_ROOT}/build/libs/aeron-playground-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}:${LOGGING_JARS}" \
     -DaeronPlayground.dir=${AERON_DIR} \
     -DaeronPlayground.archiveDir=${AERON_ARCHIVE_DIR} \
     -DaeronPlayground.controlRequestChannel="aeron:udp?endpoint=localhost:8010" \

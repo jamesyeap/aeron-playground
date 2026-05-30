@@ -69,7 +69,7 @@ public class Publisher {
             // final Publication publication = archiveClient.addRecordedPublication(aeronChannel, aeronStream);
 
             // get all the past messages that it has published thus far
-            System.out.println("Fetching all past messages sent...");
+            LOGGER.info("Fetching all past messages sent...");
             List<RecordingDetails> recordingIDList = getListOfRecordings(archiveClient, aeronChannel, aeronStream);
             for (RecordingDetails recordingDetails : recordingIDList) {
                 try {
@@ -108,7 +108,7 @@ public class Publisher {
 
             // wait for a subscriber to connect
             while (!publication.isConnected()) {
-                System.out.println("Waiting for subscriber...");
+                LOGGER.info("Waiting for subscriber...");
 
                 try {
                     Thread.sleep(TimeUnit.SECONDS.toMillis(1));
@@ -120,20 +120,20 @@ public class Publisher {
 
             // when the publisher shuts down, request the archive client to stop recording
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.format("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", recordingId);
+                LOGGER.info("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", recordingId);
                 archiveClient.stopRecording(recordingId);
                 publication.close();
 
                 while (!publication.isClosed()) {
                     try {
-                        System.out.format("Waiting for publication to be closed - publication: %s\n", publication);
+                        LOGGER.info("Waiting for publication to be closed - publication: %s\n", publication);
                         Thread.sleep(100);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
                 }
 
-                System.out.println("Publisher shut down");
+                LOGGER.info("Publisher shut down");
             }));
 
         }
@@ -162,7 +162,7 @@ public class Publisher {
                 printError(position);
             } else {
                 // otherwise, that means the buffer was successfully published
-                System.out.format("Message successfully published: %s\n", message);
+                LOGGER.info("Message successfully published: %s\n", message);
                 count++;
             }
 
@@ -194,19 +194,19 @@ public class Publisher {
 
     private static void printError(long errorCode) {
         if (errorCode == Publication.NOT_CONNECTED) {
-            System.out.println("NOT_CONNECTED");
+            LOGGER.info("NOT_CONNECTED");
 
         } else if (errorCode == Publication.BACK_PRESSURED) {
-            System.out.println("BACK_PRESSURED");
+            LOGGER.info("BACK_PRESSURED");
 
         } else if (errorCode == Publication.ADMIN_ACTION) {
-            System.out.println("ADMIN_ACTION");
+            LOGGER.info("ADMIN_ACTION");
 
         } else if (errorCode == Publication.CLOSED) {
-            System.out.println("CLOSED");
+            LOGGER.info("CLOSED");
 
         } else if (errorCode == Publication.MAX_POSITION_EXCEEDED) {
-            System.out.println("MAX_POSITION_EXCEEDED");
+            LOGGER.info("MAX_POSITION_EXCEEDED");
 
         }
     }
@@ -229,7 +229,7 @@ public class Publisher {
         String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
         Subscription replaySubscription = aeron.addSubscription(replayChannel, REPLAY_STREAM_ID);
         while (!replaySubscription.isConnected()) {
-            System.out.println("Waiting for replay subscription...");
+            LOGGER.info("Waiting for replay subscription...");
             Thread.sleep(TimeUnit.SECONDS.toMillis(1));
         }
 
@@ -241,7 +241,7 @@ public class Publisher {
             String str = new String(messageBytes);
             String lastCountString = str.substring(0, str.indexOf('\u0000'));
             Integer lastCount = Integer.parseInt(lastCountString, 10);
-            // System.out.format("lastCount: %d\n", lastCount);
+            // LOGGER.info("lastCount: %d\n", lastCount);
             if (latestCount.get() < lastCount) {
                 latestCount.set(lastCount);
             }
