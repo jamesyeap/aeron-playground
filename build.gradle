@@ -11,6 +11,7 @@ repositories {
 
 dependencies {
     implementation 'io.aeron:aeron-all:1.51.0'
+    compileOnly "uk.co.real-logic:sbe-tool:${SBE_VERSION}"
     testImplementation platform('org.junit:junit-bom:6.0.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -18,4 +19,25 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+// output directory for generated SBE class files
+var generatedSbeDir = layout.buildDirectory.dir("generated/sbe").get().asFile
+tasks.register('generateMessages', JavaExec) {
+    group = 'sbe'
+    mainClass = 'uk.co.real_logic.sbe.SbeTool'
+    classpath = sourceSets.main.compileClasspath
+    systemProperties('sbe.output.dir': generatedSbeDir,
+            'sbe.target.language': 'Java',
+            'sbe.validation.stop.on.error': 'true',
+            'sbe.validation.xsd': "${SBE_VALIDATION_XSD}")
+    args = ["${SBE_DEFINITION}"]
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir generatedSbeDir
+        }
+    }
 }
