@@ -3,11 +3,12 @@ import io.aeron.ChannelUri;
 import io.aeron.Subscription;
 import io.aeron.archive.client.AeronArchive;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
-import io.aeron.archive.client.ReplayParams;
 import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.collections.MutableLong;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
@@ -15,6 +16,8 @@ import java.util.concurrent.TimeUnit;
  * A simple subscriber that connects to a channel, subscribes to a stream, and prints all messages received from the stream.
  */
 public class Subscriber {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Subscriber.class);
+
     private static final int REPLAY_STREAM_ID = 61;
 
     public static void main(String[] args) throws InterruptedException {

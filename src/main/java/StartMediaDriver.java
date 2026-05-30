@@ -1,7 +1,8 @@
-import io.aeron.archive.client.AeronArchive;
 import io.aeron.driver.MediaDriver;
 import io.aeron.driver.ThreadingMode;
 import org.agrona.concurrent.BusySpinIdleStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * StartMediaDriver sets up the MediaDriver that will be used by all applications on this box to send and receive messages.
@@ -9,6 +10,8 @@ import org.agrona.concurrent.BusySpinIdleStrategy;
  * We're running the MediaDriver as a stand-alone process - although it can also be embedded into the same process as one of the applications.
  */
 public class StartMediaDriver {
+    private static final Logger LOGGER = LoggerFactory.getLogger(StartMediaDriver.class);
+
     public static void main(String[] args) throws InterruptedException {
         //  -DaeronPlayground.dir=/tmp/media-driver-1
         String aeronDir = System.getProperty("aeronPlayground.dir");

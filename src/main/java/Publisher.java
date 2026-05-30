@@ -6,8 +6,9 @@ import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.collections.MutableInteger;
-import org.agrona.collections.MutableReference;
 import org.agrona.concurrent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ import static io.aeron.CommonContext.ENDPOINT_PARAM_NAME;
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
  */
 public class Publisher {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Publisher.class);
 
     private static final int REPLAY_STREAM_ID = 53;
 
@@ -115,7 +117,6 @@ public class Publisher {
                     throw new RuntimeException(e);
                 }
             }
-
 
             // when the publisher shuts down, request the archive client to stop recording
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

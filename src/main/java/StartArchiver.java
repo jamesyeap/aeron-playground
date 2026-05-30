@@ -1,11 +1,15 @@
 import io.aeron.archive.Archive;
 import io.aeron.archive.ArchiveThreadingMode;
 import org.agrona.CloseHelper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A simple class that records all messages from a given channel and stream.
  */
 public class StartArchiver {
+    private static final Logger LOGGER = LoggerFactory.getLogger(StartArchiver.class);
+
     public static void main(String[] args) throws InterruptedException {
         String aeronDir = System.getProperty("aeronPlayground.dir");
         String archiveDir = System.getProperty("aeronPlayground.archiveDir");

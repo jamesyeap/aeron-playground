@@ -10,8 +10,20 @@ repositories {
 }
 
 dependencies {
+    // Aeron
     implementation 'io.aeron:aeron-all:1.51.0'
+
+    // SLF4J and L4J2
+    implementation platform('org.apache.logging.log4j:log4j-bom:2.26.0')
+    implementation 'org.slf4j:slf4j-api:2.0.12'
+    implementation 'org.apache.logging.log4j:log4j-api'
+    implementation 'org.apache.logging.log4j:log4j-core'
+    implementation 'org.apache.logging.log4j:log4j-slf4j2-impl'
+
+    // SBE
     compileOnly "uk.co.real-logic:sbe-tool:${SBE_VERSION}"
+
+    // Testing
     testImplementation platform('org.junit:junit-bom:6.0.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
