@@ -148,9 +148,12 @@ public class Publisher {
 
         @Override
         public int doWork() {
+            // send keep-alives to the Aeron Archive client
+            archiveClient.pollForErrorResponse();
+
             long currentTime = SystemEpochClock.INSTANCE.time();
             if (currentTime < clock.time()) {
-                return 0;
+                return 1;
             }
 
             clock.update(currentTime);
