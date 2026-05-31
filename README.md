@@ -1,7 +1,7 @@
 # Aeron Playground
-
 A simple toy application for me to explore how Aeron Transport, Aeron Archive and Aeron Cluster works.
 
+# Overview
 It has 4 main classes:
 
 1. StartMediaDriver
@@ -9,16 +9,13 @@ It has 4 main classes:
 3. Publisher
 4. Subscriber
 
-# StartMediaDriver
-
+## StartMediaDriver
 Creates an Aeron Media Driver, with the `aeronDir` set to `/tmp/media-driver-1`.
 
-# StartArchiver
-
+## StartArchiver
 Creates an Aeron Archive, with the `archiveDir` set to `/tmp/archive-media-driver-1`
 
-# Publisher
-
+## Publisher
 Initializes a counter to 0 - every second, it:
 
 - Sends the value of the counter to a channel `localhost:12345`, stream `51`.
@@ -27,6 +24,8 @@ Initializes a counter to 0 - every second, it:
 Note: if the publisher is restarted, it fetches all the values that it has previously sent from the Aeron Archive, and
 initializes the counter to the latest value that it previously sent (instead of 0).
 
-# Subscriber
-
+## Subscriber
 Receives the value of the counter from the channel at `localhost:12345`, stream `51`, and prints it to logs.
+
+# TODO
+when creating an Aeron Agent, how should I make it such that the agent doesn't exit until I hit CTRL + C, and when I do, it executes the tasks in onClose properly before exiting?
