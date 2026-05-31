@@ -30,8 +30,14 @@ public class Publisher {
         private int count = 0;
         private Aeron aeron;
         private Publication publication;
+        private long recordingId = -1;
         private AeronArchive archiveClient;
         private UnsafeBuffer buffer;
+
+        @Override
+        public String roleName() {
+            return "Publisher";
+        }
 
         @Override
         public void onStart() {
@@ -81,7 +87,7 @@ public class Publisher {
             }
 
             // request for Aeron Archive to start recording
-            final long recordingId = startOrExtendRecording(recordingIDList, aeronChannel, aeronStream);
+            recordingId = startOrExtendRecording(recordingIDList, aeronChannel, aeronStream);
 
             // if there was no previous recording, we can just create a vanilla publication
             if (recordingIDList.isEmpty()) {
@@ -98,8 +104,7 @@ public class Publisher {
                         .sessionId(detailsOfLastRecording.sessionId);
 
                 // UDP recordings have an endpoint to carry over; IPC recordings do not.
-                if (null != recordedUri.get(ENDPOINT_PARAM_NAME))
-                {
+                if (null != recordedUri.get(ENDPOINT_PARAM_NAME)) {
                     builder.endpoint(recordedUri);
                 }
 
@@ -117,25 +122,25 @@ public class Publisher {
                     throw new RuntimeException(e);
                 }
             }
+        }
 
+        @Override
+        public void onClose() {
             // when the publisher shuts down, request the archive client to stop recording
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                LOGGER.info("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: %d\n", recordingId);
-                archiveClient.stopRecording(recordingId);
-                publication.close();
+            LOGGER.info("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: {}\n", recordingId);
+            archiveClient.stopRecording(recordingId);
+            publication.close();
 
-                while (!publication.isClosed()) {
-                    try {
-                        LOGGER.info("Waiting for publication to be closed - publication: %s\n", publication);
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
+            while (!publication.isClosed()) {
+                try {
+                    LOGGER.info("Waiting for publication to be closed - publication: {}\n", publication);
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
+            }
 
-                LOGGER.info("Publisher shut down");
-            }));
-
+            LOGGER.info("Publisher shut down");
         }
 
         @Override
@@ -162,7 +167,7 @@ public class Publisher {
                 printError(position);
             } else {
                 // otherwise, that means the buffer was successfully published
-                LOGGER.info("Message successfully published: %s\n", message);
+                LOGGER.info("Message successfully published: {}\n", message);
                 count++;
             }
 
@@ -177,19 +182,18 @@ public class Publisher {
             return archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
         }
 
-        @Override
-        public String roleName() {
-            return "Publisher";
-        }
     }
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         IdleStrategy idleStrategy = new BackoffIdleStrategy();
-        AgentRunner agentRunner = new AgentRunner(
-                idleStrategy, Throwable::printStackTrace, null, new PublisherAgent()
-        );
-        Thread thread = AgentRunner.startOnThread(agentRunner);
-        thread.join();
+
+        try (final ShutdownSignalBarrier barrier = new ShutdownSignalBarrier();
+             AgentRunner agentRunner = new AgentRunner(
+                     idleStrategy, Throwable::printStackTrace, null, new PublisherAgent()
+             )) {
+            AgentRunner.startOnThread(agentRunner);
+            barrier.await();
+        }
     }
 
     private static void printError(long errorCode) {
@@ -241,7 +245,7 @@ public class Publisher {
             String str = new String(messageBytes);
             String lastCountString = str.substring(0, str.indexOf('\u0000'));
             Integer lastCount = Integer.parseInt(lastCountString, 10);
-            // LOGGER.info("lastCount: %d\n", lastCount);
+            // LOGGER.info("lastCount: {}\n", lastCount);
             if (latestCount.get() < lastCount) {
                 latestCount.set(lastCount);
             }
