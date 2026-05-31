@@ -22,7 +22,7 @@ public class StartArchiver {
                 .controlChannel(controlRequestChannel)
                 .controlStreamId(controlRequestStream)
                 .replicationChannel(replicationChannel)
-                .threadingMode(ArchiveThreadingMode.SHARED);
+                .threadingMode(ArchiveThreadingMode.DEDICATED);
 
         try (final Archive archive = Archive.launch(ctx)) {
             System.out.format("Started archiver. Archive directory: %s\n", archiveDir);

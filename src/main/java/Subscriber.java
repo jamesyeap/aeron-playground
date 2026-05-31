@@ -4,9 +4,10 @@ import io.aeron.Subscription;
 import io.aeron.archive.client.AeronArchive;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
 import io.aeron.logbuffer.FragmentHandler;
+import org.agrona.CloseHelper;
 import org.agrona.collections.MutableLong;
-import org.agrona.concurrent.BackoffIdleStrategy;
-import org.agrona.concurrent.IdleStrategy;
+import org.agrona.concurrent.*;
+import org.apache.log4j.LogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,70 +19,92 @@ import java.util.concurrent.TimeUnit;
 public class Subscriber {
     private static final Logger LOGGER = LoggerFactory.getLogger(Subscriber.class);
 
-    private static final int REPLAY_STREAM_ID = 61;
+    private static final class SubscriberAgent implements Agent {
 
-    public static void main(String[] args) throws InterruptedException {
-        // get configs
-        //  -DaeronPlayground.dir=/tmp/media-driver-1
-        String aeronDir = System.getProperty("aeronPlayground.dir");
-        //  -DaeronPlayground.channel="aeron:ipc"
-        String aeronChannel = System.getProperty("aeronPlayground.channel");
-        //  -DaeronPlayground.stream="51"
-        int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
+        private static final int REPLAY_STREAM_ID = 61;
 
-        // configs to connect to Aeron Archive
-        boolean shouldReplay = Boolean.parseBoolean(System.getProperty("aeronPlayground.shouldReplay", "false"));
-        String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
-        int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
-        String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
-        int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
+        String aeronDir;
+        String aeronChannel;
+        int aeronStream;
 
-        // create the configuration
-        final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
+        private Aeron aeron;
+        private Subscription subscription;
+        private AeronArchive archive;
+        private IdleStrategy idleStrategy;
+
+        private FragmentHandler fragmentHandler;
+
+        private boolean shouldReplay = false;
         int fragmentLimit = 10; // TODO: not sure what fragment limit is
-        IdleStrategy idleStrategy = new BackoffIdleStrategy(100, 10, TimeUnit.SECONDS.toNanos(1), TimeUnit.SECONDS.toNanos(10));
 
-        // create the config for the client to Aeron archive
-        AeronArchive.Context archiveCtx = new AeronArchive.Context()
-                .aeronDirectoryName(aeronDir)
-                .controlRequestChannel(controlRequestChannel)
-                .controlRequestStreamId(controlRequestStream)
-                .controlResponseChannel(controlResponseChannel)
-                .controlResponseStreamId(controlResponseStream);
+        public SubscriberAgent(IdleStrategy idleStrategy) {
+            this.idleStrategy = idleStrategy;
+        }
 
-        // connect to the media driver using the configuration
-        try (final Aeron aeron = Aeron.connect(ctx);
-             final Subscription subscription = aeron.addSubscription(aeronChannel, aeronStream);
-             final AeronArchive archive = AeronArchive.connect(archiveCtx)
-        ) {
+        @Override
+        public String roleName() {
+            return "Subscriber";
+        }
 
-            FragmentHandler fragmentHandler = (buffer, offset, length, header) -> {
+        @Override
+        public void onStart() {
+            // get configs
+            //  -DaeronPlayground.dir=/tmp/media-driver-1
+            aeronDir = System.getProperty("aeronPlayground.dir");
+            //  -DaeronPlayground.channel="aeron:ipc"
+            aeronChannel = System.getProperty("aeronPlayground.channel");
+            //  -DaeronPlayground.stream="51"
+            aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
+
+            // configs to connect to Aeron Archive
+            shouldReplay = Boolean.parseBoolean(System.getProperty("aeronPlayground.shouldReplay", "false"));
+            String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
+            int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
+            String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
+            int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
+
+            // create the configuration
+            final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
+
+            // create the config for the client to Aeron archive
+            AeronArchive.Context archiveCtx = new AeronArchive.Context()
+                    .aeronDirectoryName(aeronDir)
+                    .controlRequestChannel(controlRequestChannel)
+                    .controlRequestStreamId(controlRequestStream)
+                    .controlResponseChannel(controlResponseChannel)
+                    .controlResponseStreamId(controlResponseStream);
+
+            // connect to the media driver using the configuration
+            aeron = Aeron.connect(ctx);
+            subscription = aeron.addSubscription(aeronChannel, aeronStream);
+            archive = AeronArchive.connect(archiveCtx);
+
+            // create handler that contains the business logic
+            fragmentHandler = (buffer, offset, length, header) -> {
                 // copy the bytes from over to a new buffer -> TODO: do we need to do this?
                 byte[] messageBytes = new byte[length];
                 buffer.getBytes(offset, messageBytes);
                 String message = new String(messageBytes);
 
-                System.out.format("Received message: %s\n", message);
+                LOGGER.info("Received message: {}\n", message);
             };
 
+            // wait for subscriber to start
             if (!shouldReplay) {
                 // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
                 while (!subscription.isConnected()) {
-                    System.out.println("Waiting for publisher...");
-                    Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+                    LOGGER.info("Waiting for publisher...");
+                    try {
+                        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
-
-                subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
-
             } else {
                 long lastRecordingId = getLastRecordingId(archive, aeronChannel, aeronStream);
-                System.out.format("Last recording ID: %d\n", lastRecordingId);
+                LOGGER.info("Last recording ID: {}\n", lastRecordingId);
 
-                if (lastRecordingId == -1) {
-                    // if there were no replay recordings, just subscribe as usual
-                    subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
-
-                } else {
+                if (lastRecordingId >= 0) {
                     // otherwise, request the archiver to start replaying on the given channel and stream
                     final long sessionId = archive.startReplay(lastRecordingId, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, REPLAY_STREAM_ID);
                     String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
@@ -89,24 +112,43 @@ public class Subscriber {
 
                     // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
                     while (!replaySubscription.isConnected()) {
-                        System.out.println("Waiting for replay subscription...");
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+                        LOGGER.info("Waiting for replay subscription...");
+
+                        try {
+                            Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
                     }
 
                     replay(replaySubscription, fragmentHandler, fragmentLimit, idleStrategy);
-                    subscribe(subscription, fragmentHandler, fragmentLimit, idleStrategy);
                 }
             }
         }
+
+        @Override
+        public int doWork() throws Exception {
+            return subscription.poll(fragmentHandler, fragmentLimit);
+        }
+
+        @Override
+        public void onClose() {
+            subscription.close();
+            LOGGER.info("Shutting down subscriber - closing subscription: {}\n", subscription);
+        }
     }
 
-    private static void subscribe(Subscription subscription, FragmentHandler fragmentHandler, int fragmentLimit, IdleStrategy idleStrategy) {
-        while (true) {
-            final int numFragmentsRead = subscription.poll(fragmentHandler, fragmentLimit);
+    public static void main(String[] args) {
+        IdleStrategy idleStrategy = new BackoffIdleStrategy(100, 10, TimeUnit.SECONDS.toNanos(1), TimeUnit.SECONDS.toNanos(10));
+        ShutdownSignalBarrier barrier = new ShutdownSignalBarrier();
 
-            // idle before polling again
-            idleStrategy.idle(numFragmentsRead);
-        }
+        AgentRunner runner = new AgentRunner(idleStrategy, Throwable::printStackTrace, null, new SubscriberAgent(idleStrategy));
+
+        AgentRunner.startOnThread(runner);
+        barrier.await();
+
+        CloseHelper.closeAll(runner, barrier);
+        LogManager.shutdown();
     }
 
     private static void replay(Subscription subscription, FragmentHandler fragmentHandler, int fragmentLimit, IdleStrategy idleStrategy) {

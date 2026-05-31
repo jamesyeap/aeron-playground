@@ -1,6 +1,9 @@
 import io.aeron.driver.MediaDriver;
 import io.aeron.driver.ThreadingMode;
+import org.agrona.CloseHelper;
 import org.agrona.concurrent.BusySpinIdleStrategy;
+import org.agrona.concurrent.ShutdownSignalBarrier;
+import org.apache.log4j.LogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,7 +15,7 @@ import org.slf4j.LoggerFactory;
 public class StartMediaDriver {
     private static final Logger LOGGER = LoggerFactory.getLogger(StartMediaDriver.class);
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         //  -DaeronPlayground.dir=/tmp/media-driver-1
         String aeronDir = System.getProperty("aeronPlayground.dir");
 
@@ -20,18 +23,16 @@ public class StartMediaDriver {
         final MediaDriver.Context mediaDriverCtx = new MediaDriver.Context()
                 .aeronDirectoryName(aeronDir)
                 .sharedIdleStrategy(new BusySpinIdleStrategy())
-                .threadingMode(ThreadingMode.SHARED);
+                .threadingMode(ThreadingMode.DEDICATED);
 
-        // start the media driver - note: we use the "try-with" pattern here, so that
-        // the `close()` method of the MediaDriver can automatically run after this block is exited - see `AutoClosable`
-        try (final MediaDriver mediaDriver = MediaDriver.launch(mediaDriverCtx)) {
-            System.out.format("Media driver started! Aeron directory: %s\n", aeronDir);
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> System.out.format("Shutting down media driver - Aeron directory: %s\n", aeronDir)));
+        // start the media driver
+        ShutdownSignalBarrier barrier = new ShutdownSignalBarrier();
+        final MediaDriver mediaDriver = MediaDriver.launch(mediaDriverCtx);
+        LOGGER.info("Media driver started! Aeron directory: {}\n", aeronDir);
 
-            // to prevent shutdown
-            while (true) {
-                Thread.sleep(100);
-            }
-        }
+        barrier.await();
+        LOGGER.info("Shutting down media driver - Aeron directory: {}\n", aeronDir);
+        CloseHelper.closeAll(mediaDriver, barrier);
+        LogManager.shutdown();
     }
 }

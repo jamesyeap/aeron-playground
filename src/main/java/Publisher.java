@@ -147,7 +147,7 @@ public class Publisher {
         }
 
         @Override
-        public int doWork() throws Exception {
+        public int doWork() {
             long currentTime = SystemEpochClock.INSTANCE.time();
             if (currentTime < clock.time()) {
                 return 0;
