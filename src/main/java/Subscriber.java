@@ -1,3 +1,5 @@
+import com.aeronplayground.sbe.CounterValueDecoder;
+import com.aeronplayground.sbe.MessageHeaderDecoder;
 import io.aeron.Aeron;
 import io.aeron.ChannelUri;
 import io.aeron.Subscription;
@@ -33,6 +35,8 @@ public class Subscriber {
         private IdleStrategy idleStrategy;
 
         private FragmentHandler fragmentHandler;
+        private final CounterValueDecoder counterValueDecoder = new CounterValueDecoder();
+        private final MessageHeaderDecoder messageHeaderDecoder = new MessageHeaderDecoder();
 
         private boolean shouldReplay = false;
         int fragmentLimit = 10; // TODO: not sure what fragment limit is
@@ -81,12 +85,14 @@ public class Subscriber {
 
             // create handler that contains the business logic
             fragmentHandler = (buffer, offset, length, header) -> {
-                // copy the bytes from over to a new buffer -> TODO: do we need to do this?
-                byte[] messageBytes = new byte[length];
-                buffer.getBytes(offset, messageBytes);
-                String message = new String(messageBytes);
+                // Decode from the fragment offset provided by Aeron.
+                messageHeaderDecoder.wrap(buffer, offset);
 
-                LOGGER.info("Received message: {}\n", message);
+                int bufferOffset = offset + messageHeaderDecoder.encodedLength();
+                counterValueDecoder.wrap(buffer, bufferOffset, messageHeaderDecoder.blockLength(), messageHeaderDecoder.version());
+                long value = counterValueDecoder.value();
+
+                LOGGER.info("Received value: {}\n", value);
             };
 
             // wait for subscriber to start

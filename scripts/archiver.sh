@@ -18,6 +18,9 @@ exec ${JAVA_HOME}/bin/java \
     -DaeronPlayground.controlRequestChannel="aeron:udp?endpoint=localhost:8010" \
     -DaeronPlayground.controlRequestStream="52" \
     -DaeronPlayground.replicationChannel="aeron:udp?endpoint=localhost:8011" \
+    -javaagent:${AERON_AGENT_JAR} \
+    -Daeron.event.cluster.log=all \
+    -Daeron.event.cluster.log.disable=CANVASS_POSITION,APPEND_POSITION,COMMIT_POSITION \
     ${ADD_OPENS} \
     ${VM_OPTIONS} \
     StartArchiver

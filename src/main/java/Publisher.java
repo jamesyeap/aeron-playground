@@ -1,3 +1,5 @@
+import com.aeronplayground.sbe.CounterValueEncoder;
+import com.aeronplayground.sbe.MessageHeaderEncoder;
 import io.aeron.*;
 import io.aeron.archive.client.AeronArchive;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
@@ -7,6 +9,7 @@ import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.CloseHelper;
 import org.agrona.collections.MutableInteger;
+import org.agrona.collections.MutableLong;
 import org.agrona.concurrent.*;
 import org.apache.log4j.LogManager;
 import org.slf4j.Logger;
@@ -29,11 +32,14 @@ public class Publisher {
     private static final class PublisherAgent implements Agent {
 
         CachedEpochClock clock = new CachedEpochClock();
-        private int count = 0;
+        private long count = 0;
         private Aeron aeron;
         private Publication publication;
         private long recordingId = -1;
         private AeronArchive archiveClient;
+
+        private final CounterValueEncoder counterValueEncoder = new CounterValueEncoder();
+        private final MessageHeaderEncoder messageHeaderEncoder = new MessageHeaderEncoder();
         private UnsafeBuffer buffer;
 
         @Override
@@ -160,9 +166,11 @@ public class Publisher {
             clock.advance(TimeUnit.SECONDS.toMillis(1));
 
             // put the message into the buffer
-            String message = Integer.toString(count);
-            byte[] messageBytes = message.getBytes();
-            buffer.putBytes(0, messageBytes);
+            // String message = Integer.toString(count);
+            // byte[] messageBytes = message.getBytes();
+            // buffer.putBytes(0, messageBytes);
+            counterValueEncoder.wrapAndApplyHeader(buffer, 0, messageHeaderEncoder);
+            counterValueEncoder.value(count);
 
             // try to publish the buffer contents
             // this probably puts the contents of the buffer into the shared memory between this application and the media driver
@@ -173,7 +181,7 @@ public class Publisher {
                 printError(position);
             } else {
                 // otherwise, that means the buffer was successfully published
-                LOGGER.info("Message successfully published: {}\n", message);
+                LOGGER.info("Count successfully published: {}\n", count);
                 count++;
             }
 
@@ -216,7 +224,6 @@ public class Publisher {
 
         } else if (errorCode == Publication.MAX_POSITION_EXCEEDED) {
             LOGGER.info("MAX_POSITION_EXCEEDED");
-
         }
     }
 
@@ -233,7 +240,7 @@ public class Publisher {
         return recordingDetailsList;
     }
 
-    private static int startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int aeronStream) throws InterruptedException {
+    private static long startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int aeronStream) throws InterruptedException {
         final long sessionId = archiveClient.startReplay(recordingID, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, REPLAY_STREAM_ID);
         String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
         Subscription replaySubscription = aeron.addSubscription(replayChannel, REPLAY_STREAM_ID);
@@ -242,14 +249,14 @@ public class Publisher {
             Thread.sleep(TimeUnit.SECONDS.toMillis(1));
         }
 
-        MutableInteger latestCount = new MutableInteger();
+        MutableLong latestCount = new MutableLong();
         FragmentHandler fragmentHandler = (directBuffer, offset, length, header) -> {
             // copy the bytes from over to a new buffer -> TODO: do we need to do this?
             byte[] messageBytes = new byte[length];
             directBuffer.getBytes(offset, messageBytes);
             String str = new String(messageBytes);
             String lastCountString = str.substring(0, str.indexOf('\u0000'));
-            Integer lastCount = Integer.parseInt(lastCountString, 10);
+            long lastCount = Long.parseLong(lastCountString, 10);
             // LOGGER.info("lastCount: {}\n", lastCount);
             if (latestCount.get() < lastCount) {
                 latestCount.set(lastCount);
