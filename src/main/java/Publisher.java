@@ -5,8 +5,10 @@ import io.aeron.archive.codecs.SourceLocation;
 import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
+import org.agrona.CloseHelper;
 import org.agrona.collections.MutableInteger;
 import org.agrona.concurrent.*;
+import org.apache.log4j.LogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -141,6 +143,7 @@ public class Publisher {
             }
 
             LOGGER.info("Publisher shut down");
+            LogManager.shutdown();
         }
 
         @Override
@@ -186,14 +189,13 @@ public class Publisher {
 
     public static void main(String[] args) {
         IdleStrategy idleStrategy = new BackoffIdleStrategy();
+        final ShutdownSignalBarrier barrier = new ShutdownSignalBarrier();
+        AgentRunner agentRunner = new AgentRunner(idleStrategy, Throwable::printStackTrace, null, new PublisherAgent());
 
-        try (final ShutdownSignalBarrier barrier = new ShutdownSignalBarrier();
-             AgentRunner agentRunner = new AgentRunner(
-                     idleStrategy, Throwable::printStackTrace, null, new PublisherAgent()
-             )) {
-            AgentRunner.startOnThread(agentRunner);
-            barrier.await();
-        }
+        AgentRunner.startOnThread(agentRunner);
+        barrier.await();
+
+        CloseHelper.closeAll(agentRunner, barrier);
     }
 
     private static void printError(long errorCode) {

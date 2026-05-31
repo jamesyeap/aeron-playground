@@ -1,6 +1,5 @@
 import io.aeron.archive.Archive;
 import io.aeron.archive.ArchiveThreadingMode;
-import org.agrona.CloseHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
