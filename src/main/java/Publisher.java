@@ -1,4 +1,6 @@
+import com.aeronplayground.sbe.CounterValueDecoder;
 import com.aeronplayground.sbe.CounterValueEncoder;
+import com.aeronplayground.sbe.MessageHeaderDecoder;
 import com.aeronplayground.sbe.MessageHeaderEncoder;
 import io.aeron.*;
 import io.aeron.archive.client.AeronArchive;
@@ -8,7 +10,6 @@ import io.aeron.logbuffer.FragmentHandler;
 import org.agrona.BitUtil;
 import org.agrona.BufferUtil;
 import org.agrona.CloseHelper;
-import org.agrona.collections.MutableInteger;
 import org.agrona.collections.MutableLong;
 import org.agrona.concurrent.*;
 import org.apache.log4j.LogManager;
@@ -38,8 +39,11 @@ public class Publisher {
         private long recordingId = -1;
         private AeronArchive archiveClient;
 
-        private final CounterValueEncoder counterValueEncoder = new CounterValueEncoder();
         private final MessageHeaderEncoder messageHeaderEncoder = new MessageHeaderEncoder();
+        private final MessageHeaderDecoder messageHeaderDecoder = new MessageHeaderDecoder();
+        private final CounterValueEncoder counterValueEncoder = new CounterValueEncoder();
+        private final CounterValueDecoder counterValueDecoder = new CounterValueDecoder();
+
         private UnsafeBuffer buffer;
 
         @Override
@@ -166,9 +170,6 @@ public class Publisher {
             clock.advance(TimeUnit.SECONDS.toMillis(1));
 
             // put the message into the buffer
-            // String message = Integer.toString(count);
-            // byte[] messageBytes = message.getBytes();
-            // buffer.putBytes(0, messageBytes);
             counterValueEncoder.wrapAndApplyHeader(buffer, 0, messageHeaderEncoder);
             counterValueEncoder.value(count);
 
@@ -188,6 +189,47 @@ public class Publisher {
             return 1;
         }
 
+        private long startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int aeronStream) throws InterruptedException {
+            final long sessionId = archiveClient.startReplay(recordingID, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, REPLAY_STREAM_ID);
+            String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
+            Subscription replaySubscription = aeron.addSubscription(replayChannel, REPLAY_STREAM_ID);
+            while (!replaySubscription.isConnected()) {
+                LOGGER.info("Waiting for replay subscription...");
+                Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+            }
+
+            MutableLong latestCount = new MutableLong();
+            FragmentHandler fragmentHandler = (directBuffer, offset, length, header) -> {
+                messageHeaderDecoder.wrap(directBuffer, offset);
+                counterValueDecoder.wrap(directBuffer, offset + messageHeaderDecoder.encodedLength(),
+                        messageHeaderDecoder.blockLength(),
+                        messageHeaderDecoder.version());
+
+                long lastCount = counterValueDecoder.value();
+                LOGGER.info("lastCount: {}\n", lastCount);
+                if (latestCount.get() < lastCount) {
+                    latestCount.set(lastCount);
+                }
+            };
+
+            int fragmentLimit = 10;
+            IdleStrategy idleStrategy = new BusySpinIdleStrategy();
+
+            // start replay
+            while (true) {
+                final int numFragmentsRead = replaySubscription.poll(fragmentHandler, fragmentLimit);
+                if (numFragmentsRead == 0) {
+                    break;
+                }
+
+                // idle before polling again
+                idleStrategy.idle(numFragmentsRead);
+            }
+
+            return latestCount.get();
+        }
+
+
         private long startOrExtendRecording(List<RecordingDetails> recordingIDList, String aeronChannel, int aeronStream) {
             if (!recordingIDList.isEmpty()) {
                 return archiveClient.extendRecording(recordingIDList.getLast().recordingId(), aeronChannel, aeronStream, SourceLocation.REMOTE);
@@ -195,7 +237,6 @@ public class Publisher {
 
             return archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
         }
-
     }
 
     public static void main(String[] args) {
@@ -238,46 +279,6 @@ public class Publisher {
         archiveClient.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
 
         return recordingDetailsList;
-    }
-
-    private static long startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int aeronStream) throws InterruptedException {
-        final long sessionId = archiveClient.startReplay(recordingID, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, REPLAY_STREAM_ID);
-        String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
-        Subscription replaySubscription = aeron.addSubscription(replayChannel, REPLAY_STREAM_ID);
-        while (!replaySubscription.isConnected()) {
-            LOGGER.info("Waiting for replay subscription...");
-            Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-        }
-
-        MutableLong latestCount = new MutableLong();
-        FragmentHandler fragmentHandler = (directBuffer, offset, length, header) -> {
-            // copy the bytes from over to a new buffer -> TODO: do we need to do this?
-            byte[] messageBytes = new byte[length];
-            directBuffer.getBytes(offset, messageBytes);
-            String str = new String(messageBytes);
-            String lastCountString = str.substring(0, str.indexOf('\u0000'));
-            long lastCount = Long.parseLong(lastCountString, 10);
-            // LOGGER.info("lastCount: {}\n", lastCount);
-            if (latestCount.get() < lastCount) {
-                latestCount.set(lastCount);
-            }
-        };
-
-        int fragmentLimit = 10;
-        IdleStrategy idleStrategy = new BusySpinIdleStrategy();
-
-        // start replay
-        while (true) {
-            final int numFragmentsRead = replaySubscription.poll(fragmentHandler, fragmentLimit);
-            if (numFragmentsRead == 0) {
-                break;
-            }
-
-            // idle before polling again
-            idleStrategy.idle(numFragmentsRead);
-        }
-
-        return latestCount.get();
     }
 
     private record RecordingDetails(
