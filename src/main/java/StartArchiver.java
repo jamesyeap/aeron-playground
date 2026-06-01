@@ -1,5 +1,8 @@
 import io.aeron.archive.Archive;
 import io.aeron.archive.ArchiveThreadingMode;
+import org.agrona.CloseHelper;
+import org.agrona.concurrent.ShutdownSignalBarrier;
+import org.apache.log4j.LogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +13,9 @@ public class StartArchiver {
     private static final Logger LOGGER = LoggerFactory.getLogger(StartArchiver.class);
 
     public static void main(String[] args) throws InterruptedException {
+        final ShutdownSignalBarrier barrier = new ShutdownSignalBarrier();
+
+        // get config
         String aeronDir = System.getProperty("aeronPlayground.dir");
         String archiveDir = System.getProperty("aeronPlayground.archiveDir");
         String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
@@ -24,16 +30,13 @@ public class StartArchiver {
                 .replicationChannel(replicationChannel)
                 .threadingMode(ArchiveThreadingMode.DEDICATED);
 
-        try (final Archive archive = Archive.launch(ctx)) {
-            System.out.format("Started archiver. Archive directory: %s\n", archiveDir);
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.format("Shut down archiver. Archive directory: %s\n", archiveDir);
-            }));
+        final Archive archive = Archive.launch(ctx);
+        LOGGER.info("Started archiver. Archive directory: {}\n", archiveDir);
 
-            // busy spin to stop exiting
-            while (true) {
-                Thread.sleep(100);
-            }
-        }
+        barrier.await();
+
+        LOGGER.info("Shut down archiver. Archive directory: {}\n", archiveDir);
+        CloseHelper.closeAll(archive, barrier);
+        LogManager.shutdown();
     }
 }
