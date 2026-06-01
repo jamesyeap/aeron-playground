@@ -1,5 +1,5 @@
 ADD_OPENS="--add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.util.zip=ALL-UNNAMED"
-VM_OPTIONS="-XX:+UnlockExperimentalVMOptions -XX:+TrustFinalNonStaticFields -XX:+UnlockDiagnosticVMOptions -XX:GuaranteedSafepointInterval=300000 -XX:+UseParallelGC"
+VM_OPTIONS="-XX:+UnlockExperimentalVMOptions -XX:+TrustFinalNonStaticFields -XX:+UnlockDiagnosticVMOptions -XX:GuaranteedSafepointInterval=300000 -XX:+UseParallelGC -Xmx2g"
 
 # The application fat jars bundle Aeron and the SLF4J/Log4j2 stack, so only the
 # Aeron agent jar (loaded via -javaagent, not on the classpath) is needed here.
