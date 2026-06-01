@@ -20,7 +20,7 @@ AERON_DEBUG_LOGGING_PROPS=(
 
 # === START ===
 exec ${JAVA_HOME}/bin/java \
-    -cp "${REPO_ROOT}/build/libs/aeron-playground-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}:${LOGGING_JARS}" \
+    -cp "${REPO_ROOT}/apps/media-driver/build/libs/media-driver-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}:${LOGGING_JARS}" \
     -DaeronPlayground.dir=${AERON_DIR} \
     ${ADD_OPENS} \
     ${VM_OPTIONS} \

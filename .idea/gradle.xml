@@ -7,6 +7,11 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/apps" />
+            <option value="$PROJECT_DIR$/apps/archiver" />
+            <option value="$PROJECT_DIR$/apps/media-driver" />
+            <option value="$PROJECT_DIR$/apps/publisher" />
+            <option value="$PROJECT_DIR$/apps/subscriber" />
           </set>
         </option>
         <option name="myGradleHome" value="" />

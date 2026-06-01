@@ -1,1 +1,3 @@
 rootProject.name = 'aeron-playground'
+
+include 'apps:archiver', 'apps:media-driver', 'apps:publisher', 'apps:subscriber'

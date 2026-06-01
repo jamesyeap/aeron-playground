@@ -1,56 +1,77 @@
-plugins {
-    id 'java'
-}
 
 group = 'org.jamesyeap'
 version = '1.0-SNAPSHOT'
 
-repositories {
-    mavenCentral()
-}
+subprojects {
+    apply plugin: 'java'
 
-dependencies {
-    // Aeron
-    implementation 'io.aeron:aeron-all:1.51.0'
+    group = rootProject.group
+    version = rootProject.version
 
-    // SLF4J facade with Log4j2 backend
-    implementation 'org.slf4j:slf4j-api:2.0.13'
-    implementation 'org.slf4j:log4j-over-slf4j:2.0.18'
-    runtimeOnly 'org.apache.logging.log4j:log4j-api:2.23.1'
-    runtimeOnly 'org.apache.logging.log4j:log4j-core:2.23.1'
-    runtimeOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.23.1'
+    repositories {
+        mavenCentral()
+    }
 
-    // SBE
-    compileOnly "uk.co.real-logic:sbe-tool:${SBE_VERSION}"
+    dependencies {
+        // Aeron
+        implementation 'io.aeron:aeron-all:1.51.0'
 
-    // Testing
-    testImplementation platform('org.junit:junit-bom:6.0.0')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    testImplementation 'io.aeron:aeron-agent:1.51.0'
-}
+        // SLF4J facade with Log4j2 backend
+        implementation 'org.slf4j:slf4j-api:2.0.13'
+        implementation 'org.slf4j:log4j-over-slf4j:2.0.18'
+        runtimeOnly 'org.apache.logging.log4j:log4j-api:2.23.1'
+        runtimeOnly 'org.apache.logging.log4j:log4j-core:2.23.1'
+        runtimeOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.23.1'
 
-test {
-    useJUnitPlatform()
-}
+        // SBE (used by publisher/subscriber build tasks)
+        compileOnly "uk.co.real-logic:sbe-tool:${SBE_VERSION}"
 
-// output directory for generated SBE class files
-var generatedSbeDir = layout.buildDirectory.dir("generated/sbe").get().asFile
-tasks.register('generateMessages', JavaExec) {
-    group = 'sbe'
-    mainClass = 'uk.co.real_logic.sbe.SbeTool'
-    classpath = sourceSets.main.compileClasspath
-    systemProperties('sbe.output.dir': generatedSbeDir,
-            'sbe.target.language': 'Java',
-            'sbe.validation.stop.on.error': 'true',
-            'sbe.validation.xsd': "${SBE_VALIDATION_XSD}")
-    args = ["${SBE_DEFINITION}"]
-}
+        // Testing
+        testImplementation platform('org.junit:junit-bom:6.0.0')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+        testImplementation 'io.aeron:aeron-agent:1.51.0'
+    }
 
-sourceSets {
-    main {
-        java {
-            srcDir generatedSbeDir
-        }
+    test {
+        useJUnitPlatform()
     }
 }
+
+def configureSbeGeneration(Project project) {
+    def generatedSbeDir = project.layout.buildDirectory.dir("generated/sbe").get().asFile
+
+    project.tasks.register('generateMessages', JavaExec) {
+        group = 'sbe'
+        mainClass = 'uk.co.real_logic.sbe.SbeTool'
+        classpath = project.sourceSets.main.compileClasspath
+        systemProperties(
+                'sbe.output.dir': generatedSbeDir,
+                'sbe.target.language': 'Java',
+                'sbe.validation.stop.on.error': 'true',
+                'sbe.validation.xsd': project.file('src/main/resources/sbe/sbe.xsd').path
+        )
+        args = [project.file('src/main/resources/sbe/messages.xml').path]
+    }
+
+    project.sourceSets {
+        main {
+            java {
+                srcDir generatedSbeDir
+            }
+        }
+    }
+
+    project.tasks.named('compileJava') {
+        dependsOn 'generateMessages'
+    }
+}
+
+project(':apps:publisher') {
+    configureSbeGeneration(delegate)
+}
+
+project(':apps:subscriber') {
+    configureSbeGeneration(delegate)
+}
+
