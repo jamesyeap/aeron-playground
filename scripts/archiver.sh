@@ -10,20 +10,28 @@ source "${SCRIPT_DIR}/common.sh"
 # === CONFIG ===
 AERON_DIR="/tmp/media-driver-1"
 AERON_ARCHIVE_DIR="/tmp/archive-media-driver-1"
+REPLAY_CONTROL_REQUEST_CHANNEL="aeron:udp?endpoint=localhost:8010"
+REPLAY_CONTROL_REQUEST_STREAM="52"
+REPLAY_CONTROL_REPLICATION_CHANNEL="aeron:udp?endpoint=localhost:8011"
+
+# === DEBUG LOGGING FOR AERON ===
+AERON_DEBUG_LOGGING_PROPS=(
+  -javaagent:${AERON_AGENT_JAR}
+  -Daeron.event.log.filename="${REPO_ROOT}/logs/archiverDebug.log"
+  -Daeron.event.archive.log="all"
+)
 
 # === START ===
 exec ${JAVA_HOME}/bin/java \
     -cp "${REPO_ROOT}/build/libs/aeron-playground-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}:${LOGGING_JARS}" \
     -DaeronPlayground.dir=${AERON_DIR} \
     -DaeronPlayground.archiveDir=${AERON_ARCHIVE_DIR} \
-    -DaeronPlayground.controlRequestChannel="aeron:udp?endpoint=localhost:8010" \
-    -DaeronPlayground.controlRequestStream="52" \
-    -DaeronPlayground.replicationChannel="aeron:udp?endpoint=localhost:8011" \
-    -javaagent:${AERON_AGENT_JAR} \
-    -Daeron.event.log.filename="${REPO_ROOT}/logs/archiverDebug.log" \
-    -Daeron.event.archive.log="all" \
+    -DaeronPlayground.controlRequestChannel=${REPLAY_CONTROL_REQUEST_CHANNEL} \
+    -DaeronPlayground.controlRequestStream=${REPLAY_CONTROL_REQUEST_STREAM} \
+    -DaeronPlayground.replicationChannel=${REPLAY_CONTROL_REPLICATION_CHANNEL} \
     ${ADD_OPENS} \
     ${VM_OPTIONS} \
+    "${AERON_DEBUG_LOGGING_PROPS[@]}" \
     StartArchiver
 
 # -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5104 \

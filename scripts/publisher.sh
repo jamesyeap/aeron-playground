@@ -11,6 +11,11 @@ source "${SCRIPT_DIR}/common.sh"
 AERON_DIR="/tmp/media-driver-1"
 AERON_CHANNEL="aeron:udp?endpoint=127.0.0.1:12345"
 AERON_STREAM="51"
+REPLAY_STREAM="61"
+REPLAY_CONTROL_REQUEST_CHANNEL="aeron:udp?endpoint=localhost:8010"
+REPLAY_CONTROL_REQUEST_STREAM="52"
+REPLAY_CONTROL_RESPONSE_CHANNEL="aeron:udp?endpoint=localhost:0"
+REPLAY_CONTROL_RESPONSE_STREAM="53"
 
 # === START ===
 exec ${JAVA_HOME}/bin/java \
@@ -18,12 +23,13 @@ exec ${JAVA_HOME}/bin/java \
     -DaeronPlayground.dir=${AERON_DIR} \
     -DaeronPlayground.channel=${AERON_CHANNEL} \
     -DaeronPlayground.stream=${AERON_STREAM} \
-    -DaeronPlayground.controlRequestChannel="aeron:udp?endpoint=localhost:8010" \
-    -DaeronPlayground.controlRequestStream="52" \
-    -DaeronPlayground.controlResponseChannel="aeron:udp?endpoint=localhost:0" \
-    -DaeronPlayground.controlResponseStream="53" \
+    -DaeronPlayground.replayStream=${REPLAY_STREAM} \
+    -DaeronPlayground.controlRequestChannel=${REPLAY_CONTROL_REQUEST_CHANNEL} \
+    -DaeronPlayground.controlRequestStream=${REPLAY_CONTROL_REQUEST_STREAM} \
+    -DaeronPlayground.controlResponseChannel=${REPLAY_CONTROL_RESPONSE_CHANNEL} \
+    -DaeronPlayground.controlResponseStream=${REPLAY_CONTROL_RESPONSE_STREAM} \
     ${ADD_OPENS} \
     ${VM_OPTIONS} \
-    Publisher
+    publisher.Publisher
 
 # -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5104 \

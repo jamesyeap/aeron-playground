@@ -7,7 +7,7 @@ It has 4 main classes:
 1. StartMediaDriver
 2. StartArchiver
 3. Publisher
-4. Subscriber
+4. subscriber.Subscriber
 
 ## StartMediaDriver
 Creates an Aeron Media Driver, with the `aeronDir` set to `/tmp/media-driver-1`.
@@ -24,7 +24,7 @@ Initializes a counter to 0 - every second, it:
 Note: if the publisher is restarted, it fetches all the values that it has previously sent from the Aeron Archive, and
 initializes the counter to the latest value that it previously sent (instead of 0).
 
-## Subscriber
+## subscriber.Subscriber
 Receives the value of the counter from the channel at `localhost:12345`, stream `51`, and prints it to logs.
 
 # TODO
