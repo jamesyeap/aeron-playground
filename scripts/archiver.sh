@@ -23,7 +23,7 @@ AERON_DEBUG_LOGGING_PROPS=(
 
 # === START ===
 exec ${JAVA_HOME}/bin/java \
-    -cp "${REPO_ROOT}/apps/archiver/build/libs/archiver-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}:${LOGGING_JARS}" \
+    -cp "${REPO_ROOT}/apps/archiver/build/libs/archiver-1.0-SNAPSHOT-all.jar" \
     -DaeronPlayground.dir=${AERON_DIR} \
     -DaeronPlayground.archiveDir=${AERON_ARCHIVE_DIR} \
     -DaeronPlayground.controlRequestChannel=${REPLAY_CONTROL_REQUEST_CHANNEL} \

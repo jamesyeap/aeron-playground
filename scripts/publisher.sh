@@ -19,7 +19,7 @@ REPLAY_CONTROL_RESPONSE_STREAM="53"
 
 # === START ===
 exec ${JAVA_HOME}/bin/java \
-    -cp "${REPO_ROOT}/apps/publisher/build/libs/publisher-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}:${LOGGING_JARS}" \
+    -cp "${REPO_ROOT}/apps/publisher/build/libs/publisher-1.0-SNAPSHOT-all.jar" \
     -DaeronPlayground.dir=${AERON_DIR} \
     -DaeronPlayground.channel=${AERON_CHANNEL} \
     -DaeronPlayground.stream=${AERON_STREAM} \

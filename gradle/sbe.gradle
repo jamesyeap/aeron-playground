@@ -1,0 +1,34 @@
+// SBE message generation, shared by the publisher and subscriber apps.
+// Apply with `apply from: "${rootDir}/gradle/sbe.gradle"`.
+
+dependencies {
+    // SBE tool, used only by the generateMessages task below.
+    compileOnly "uk.co.real-logic:sbe-tool:${SBE_VERSION}"
+}
+
+def generatedSbeDir = layout.buildDirectory.dir('generated/sbe').get().asFile
+
+tasks.register('generateMessages', JavaExec) {
+    group = 'sbe'
+    mainClass = 'uk.co.real_logic.sbe.SbeTool'
+    classpath = sourceSets.main.compileClasspath
+    systemProperties(
+            'sbe.output.dir': generatedSbeDir,
+            'sbe.target.language': 'Java',
+            'sbe.validation.stop.on.error': 'true',
+            'sbe.validation.xsd': file('src/main/resources/sbe/sbe.xsd').path
+    )
+    args = [file('src/main/resources/sbe/messages.xml').path]
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir generatedSbeDir
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn 'generateMessages'
+}

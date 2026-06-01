@@ -19,7 +19,7 @@ source "${SCRIPT_DIR}/common.sh"
 
 # === START ===
 exec ${JAVA_HOME}/bin/java \
-    -cp "${REPO_ROOT}/apps/subscriber/build/libs/subscriber-1.0-SNAPSHOT.jar:${AERON_LIB_JAR}:${LOGGING_JARS}" \
+    -cp "${REPO_ROOT}/apps/subscriber/build/libs/subscriber-1.0-SNAPSHOT-all.jar" \
     -DaeronPlayground.dir=${AERON_DIR} \
     -DaeronPlayground.channel=${AERON_CHANNEL} \
     -DaeronPlayground.stream=${AERON_STREAM} \

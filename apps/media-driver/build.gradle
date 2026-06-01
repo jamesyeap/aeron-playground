@@ -1,0 +1,10 @@
+plugins {
+    id 'com.gradleup.shadow'
+}
+
+// Fat jar: build/libs/media-driver-<version>-all.jar
+tasks.named('shadowJar') {
+    manifest {
+        attributes 'Main-Class': 'StartMediaDriver'
+    }
+}
