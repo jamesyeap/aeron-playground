@@ -165,7 +165,6 @@ public class PublisherAgent implements Agent {
 
         clock.update(currentTime);
         clock.advance(TimeUnit.MILLISECONDS.toMillis(intervalInMs));
-        LOGGER.info("Current interval setting: {}", intervalInMs);
 
         // put the message into the buffer
         counterValueEncoder.wrapAndApplyHeader(buffer, 0, messageHeaderEncoder);
@@ -189,6 +188,10 @@ public class PublisherAgent implements Agent {
 
     public void setIntervalInMs(int intervalInMs) {
         this.intervalInMs = intervalInMs;
+
+        // reset the clock
+        this.clock.update(SystemEpochClock.INSTANCE.time());
+        clock.advance(TimeUnit.MILLISECONDS.toMillis(intervalInMs));
     }
 
     private long startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int replayStream) throws InterruptedException {

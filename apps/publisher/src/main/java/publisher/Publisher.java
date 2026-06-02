@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.shell.core.ShellRunner;
+import org.springframework.shell.core.command.annotation.Argument;
 import org.springframework.shell.core.command.annotation.Command;
 import org.springframework.shell.core.command.annotation.EnableCommand;
 import org.springframework.shell.core.command.annotation.Option;
@@ -50,12 +51,9 @@ public class Publisher {
         System.out.println("Hello " + name + "!");
     }
 
-    @Command(name = "setInterval", description = "Set the interval between messages sent by the publisher, in milliseconds.", group = "message")
-    public void setInterval(
-            @Option(shortName = 'i',
-                    longName = "interval",
-                    description = "interval, in milliseconds",
-                    defaultValue = "500") int interval
+    @Command(name = "interval", description = "Set the interval between messages sent by the publisher, in milliseconds.", group = "Message")
+    public void interval(
+            @Argument(index = 0, description = "interval, in milliseconds", defaultValue = "500") int interval
     ) {
         LOGGER.info("Setting message interval to: {} ms", interval);
         agent.setIntervalInMs(interval);
