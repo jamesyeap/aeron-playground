@@ -4,7 +4,6 @@ import org.agrona.CloseHelper;
 import org.agrona.concurrent.AgentRunner;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.IdleStrategy;
-import org.agrona.concurrent.ShutdownSignalBarrier;
 import org.apache.log4j.LogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +12,8 @@ import org.springframework.shell.core.ShellRunner;
 import org.springframework.shell.core.command.annotation.Command;
 import org.springframework.shell.core.command.annotation.EnableCommand;
 import org.springframework.shell.core.command.annotation.Option;
+
+import java.util.Set;
 
 /**
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
@@ -24,7 +25,6 @@ public class Publisher {
     public static void main(String[] args) throws Exception {
         // start the publisher agent
         IdleStrategy idleStrategy = new BackoffIdleStrategy();
-        final ShutdownSignalBarrier barrier = new ShutdownSignalBarrier();
         AgentRunner agentRunner = new AgentRunner(idleStrategy, Throwable::printStackTrace, null, new PublisherAgent());
 
         AgentRunner.startOnThread(agentRunner);
@@ -32,22 +32,12 @@ public class Publisher {
         // start up an interactive console for us to interact with the publisher app as its running
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(Publisher.class);
         ShellRunner runner = context.getBean(ShellRunner.class);
-        runner.run(args);
-        Thread consoleThread = new Thread(() -> {
-            try {
-                runner.run(args);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            } finally {
-                LOGGER.info("Signalling barrier");
-                barrier.signal();
-            }
-        });
-
-        // barrier.await();
-        consoleThread.join();
-        CloseHelper.closeAll(agentRunner, context, barrier);
-        LogManager.shutdown();
+        try {
+            runner.run(args);
+        } finally {
+            CloseHelper.closeAll(agentRunner, context);
+            LogManager.shutdown();
+        }
     }
 
     @Command(name = "hello", description = "Say hello to a given name", group = "Greetings",

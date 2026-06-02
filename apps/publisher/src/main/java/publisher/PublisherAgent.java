@@ -147,6 +147,9 @@ public class PublisherAgent implements Agent {
             }
         }
 
+        aeron.close();
+        archiveClient.close();
+
         LOGGER.info("Publisher shut down");
     }
 
