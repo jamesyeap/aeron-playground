@@ -1,5 +1,7 @@
 package publisher;
 
+import io.aeron.archive.client.AeronArchive;
+import io.aeron.archive.client.RecordingDescriptorConsumer;
 import org.agrona.CloseHelper;
 import org.agrona.concurrent.AgentRunner;
 import org.agrona.concurrent.BackoffIdleStrategy;
@@ -11,10 +13,13 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.shell.core.ShellRunner;
 import org.springframework.shell.core.command.annotation.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
  */
-@EnableCommand({Publisher.class, Publisher.IntervalCommands.class})
+@EnableCommand({Publisher.class, Publisher.IntervalCommands.class, Publisher.AeronArchiveCommands.class})
 public class Publisher {
     private static final Logger LOGGER = LoggerFactory.getLogger(Publisher.class);
 
@@ -52,7 +57,7 @@ public class Publisher {
     public static final class IntervalCommands {
         @Command(name = "set", description = "Set the interval between messages sent by the publisher, in milliseconds.")
         public String interval(
-                @Argument(index = 0, description = "interval, in milliseconds", defaultValue = "500") int interval
+                @Argument(index = 0, description = "interval, in milliseconds") int interval
         ) {
             agent.setIntervalInMs(interval);
             String output = String.format("Setting message interval to: %s ms", interval);
@@ -64,6 +69,17 @@ public class Publisher {
         public String show(
         ) {
             return String.format("Current message interval: %s ms", agent.getIntervalInMs());
+        }
+    }
+
+    @CommandGroup(name = "Aeron Archive Client Commands", prefix = "archive")
+    public static final class AeronArchiveCommands {
+        @Command(name = "list", description = "List all archive recordings for the current published stream.")
+        public String list() {
+            List<RecordingDetails> recordingDetailsList = agent.getListOfRecordings();
+            String output = String.format("Recording details: %s", recordingDetailsList);
+            LOGGER.info(output);
+            return output;
         }
     }
 }

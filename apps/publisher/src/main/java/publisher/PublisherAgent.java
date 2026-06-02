@@ -31,6 +31,7 @@ public class PublisherAgent implements Agent {
     private Publication publication;
     private long recordingId = -1;
     private AeronArchive archiveClient;
+    private Config config;
     private volatile int intervalInMs;
 
     private final MessageHeaderEncoder messageHeaderEncoder = new MessageHeaderEncoder();
@@ -47,17 +48,16 @@ public class PublisherAgent implements Agent {
 
     @Override
     public void onStart() {
-        // get configs
-        String aeronDir = System.getProperty("aeronPlayground.dir");
-        String aeronChannel = System.getProperty("aeronPlayground.channel");
-        int aeronStream = Integer.parseInt(System.getProperty("aeronPlayground.stream"));
-        int replayStream = Integer.parseInt(System.getProperty("aeronPlayground.replayStream"));
-
-        // configs to connect to Aeron Archive
-        String controlRequestChannel = System.getProperty("aeronPlayground.controlRequestChannel");
-        int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
-        String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
-        int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
+        config = new Config(
+                System.getProperty("aeronPlayground.dir"),
+                System.getProperty("aeronPlayground.channel"),
+                Integer.parseInt(System.getProperty("aeronPlayground.stream")),
+                Integer.parseInt(System.getProperty("aeronPlayground.replayStream")),
+                System.getProperty("aeronPlayground.controlRequestChannel"),
+                Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream")),
+                System.getProperty("aeronPlayground.controlResponseChannel"),
+                Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"))
+        );
 
         // config for how often to send a new message
         intervalInMs = Integer.parseInt(System.getProperty("aeronPlayground.intervalInMs", "500"));
@@ -66,15 +66,15 @@ public class PublisherAgent implements Agent {
         buffer = new UnsafeBuffer(BufferUtil.allocateDirectAligned(512, BitUtil.CACHE_LINE_LENGTH));
 
         // create the configuration
-        final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
+        final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(config.getAeronDir());
 
         // create the config for the client to Aeron archive
         AeronArchive.Context archiveCtx = new AeronArchive.Context()
-                .aeronDirectoryName(aeronDir)
-                .controlRequestChannel(controlRequestChannel)
-                .controlRequestStreamId(controlRequestStream)
-                .controlResponseChannel(controlResponseChannel)
-                .controlResponseStreamId(controlResponseStream);
+                .aeronDirectoryName(config.getAeronDir())
+                .controlRequestChannel(config.getControlRequestChannel())
+                .controlRequestStreamId(config.getControlRequestStream())
+                .controlResponseChannel(config.getControlResponseChannel())
+                .controlResponseStreamId(config.getControlResponseStream());
 
         // connect to the media driver using the configuration
         aeron = Aeron.connect(ctx);
@@ -83,10 +83,10 @@ public class PublisherAgent implements Agent {
 
         // get all the past messages that it has published thus far
         LOGGER.info("Fetching all past messages sent...");
-        List<RecordingDetails> recordingIDList = getListOfRecordings(archiveClient, aeronChannel, aeronStream);
-        for (RecordingDetails recordingDetails : recordingIDList) {
+        List<RecordingDetails> recordingDetailsList = getListOfRecordings();
+        for (RecordingDetails recordingDetails : recordingDetailsList) {
             try {
-                count = startReplay(recordingDetails.recordingId(), aeron, archiveClient, aeronChannel, replayStream);
+                count = startReplay(recordingDetails.recordingId(), aeron, archiveClient, config.getAeronChannel(), config.getReplayStream());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
@@ -94,11 +94,11 @@ public class PublisherAgent implements Agent {
         }
 
         // request for Aeron Archive to start recording
-        recordingId = startOrExtendRecording(recordingIDList, aeronChannel, aeronStream);
+        recordingId = startOrExtendRecording(recordingIDList, config.getAeronChannel(), config.getAeronStream());
 
         // if there was no previous recording, we can just create a vanilla publication
         if (recordingIDList.isEmpty()) {
-            publication = aeron.addPublication(aeronChannel, aeronStream);
+            publication = aeron.addPublication(config.getAeronChannel(), config.getAeronStream());
 
         } else {
             // otherwise, we should extend the last recording - to create a publication based on the last recording, we need to do this as we want to extend the last recording, and to do so the publication must match with the recording.
@@ -198,6 +198,21 @@ public class PublisherAgent implements Agent {
         clock.advance(TimeUnit.MILLISECONDS.toMillis(intervalInMs));
     }
 
+    public Aeron getAeron() {
+        return aeron;
+    }
+
+    public Publication getPublication() {
+        return publication;
+    }
+    public AeronArchive getArchiveClient() {
+        return archiveClient;
+    }
+
+    public Config getConfig() {
+        return config;
+    }
+
     private long startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int replayStream) throws InterruptedException {
         final long sessionId = archiveClient.startReplay(recordingID, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, replayStream);
         String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
@@ -246,15 +261,16 @@ public class PublisherAgent implements Agent {
         return archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
     }
 
-    private List<RecordingDetails> getListOfRecordings(AeronArchive archiveClient, String aeronChannel, int aeronStream) {
-        List<RecordingDetails> recordingDetailsList = new ArrayList<>();
+    public List<RecordingDetails> getListOfRecordings() {
+        String channel = config.getAeronChannel();
+        int stream = config.getAeronStream();
 
+        // look through all the recordings that the archiver has for the channel and stream
+        List<RecordingDetails> recordingDetailsList = new ArrayList<>();
         RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
             recordingDetailsList.add(new RecordingDetails(controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity));
         };
-
-        // look through all the recordings that the archiver has for the channel and stream
-        archiveClient.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
+        archiveClient.listRecordingsForUri(0L, 100, channel, stream, consumer);
 
         return recordingDetailsList;
     }
@@ -274,6 +290,69 @@ public class PublisherAgent implements Agent {
 
         } else if (errorCode == Publication.MAX_POSITION_EXCEEDED) {
             LOGGER.info("MAX_POSITION_EXCEEDED");
+        }
+    }
+
+    public static final class Config {
+        private final String aeronDir;
+        private final String aeronChannel;
+        private final int aeronStream;
+        private final int replayStream;
+        private final String controlRequestChannel;
+        private final int controlRequestStream;
+        private final String controlResponseChannel;
+        private final int controlResponseStream;
+
+        private Config(
+                String aeronDir,
+                String aeronChannel,
+                int aeronStream,
+                int replayStream,
+                String controlRequestChannel,
+                int controlRequestStream,
+                String controlResponseChannel,
+                int controlResponseStream
+        ) {
+            this.aeronDir = aeronDir;
+            this.aeronChannel = aeronChannel;
+            this.aeronStream = aeronStream;
+            this.replayStream = replayStream;
+            this.controlRequestChannel = controlRequestChannel;
+            this.controlRequestStream = controlRequestStream;
+            this.controlResponseChannel = controlResponseChannel;
+            this.controlResponseStream = controlResponseStream;
+        }
+
+        public String getAeronDir() {
+            return aeronDir;
+        }
+
+        public String getAeronChannel() {
+            return aeronChannel;
+        }
+
+        public int getAeronStream() {
+            return aeronStream;
+        }
+
+        public int getReplayStream() {
+            return replayStream;
+        }
+
+        public String getControlRequestChannel() {
+            return controlRequestChannel;
+        }
+
+        public int getControlRequestStream() {
+            return controlRequestStream;
+        }
+
+        public String getControlResponseChannel() {
+            return controlResponseChannel;
+        }
+
+        public int getControlResponseStream() {
+            return controlResponseStream;
         }
     }
 }
