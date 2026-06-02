@@ -14,7 +14,7 @@ import org.springframework.shell.core.command.annotation.*;
 /**
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
  */
-@EnableCommand(Publisher.class)
+@EnableCommand({Publisher.class, Publisher.IntervalCommands.class})
 public class Publisher {
     private static final Logger LOGGER = LoggerFactory.getLogger(Publisher.class);
 
@@ -49,7 +49,7 @@ public class Publisher {
     }
 
     @CommandGroup(name = "Interval Commands", prefix = "interval")
-    private static final class IntervalCommands {
+    public static final class IntervalCommands {
         @Command(name = "set", description = "Set the interval between messages sent by the publisher, in milliseconds.")
         public String interval(
                 @Argument(index = 0, description = "interval, in milliseconds", defaultValue = "500") int interval
