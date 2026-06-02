@@ -32,11 +32,21 @@ public class Publisher {
         // start up an interactive console for us to interact with the publisher app as its running
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(Publisher.class);
         ShellRunner runner = context.getBean(ShellRunner.class);
-
         runner.run(args);
-        barrier.await();
+        Thread consoleThread = new Thread(() -> {
+            try {
+                runner.run(args);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                LOGGER.info("Signalling barrier");
+                barrier.signal();
+            }
+        });
 
-        CloseHelper.closeAll(agentRunner, context);
+        // barrier.await();
+        consoleThread.join();
+        CloseHelper.closeAll(agentRunner, context, barrier);
         LogManager.shutdown();
     }
 
