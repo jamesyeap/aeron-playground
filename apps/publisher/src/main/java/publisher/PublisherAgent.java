@@ -31,7 +31,7 @@ public class PublisherAgent implements Agent {
     private Publication publication;
     private long recordingId = -1;
     private AeronArchive archiveClient;
-    private volatile int intervalInMs = 500;
+    private volatile int intervalInMs;
 
     private final MessageHeaderEncoder messageHeaderEncoder = new MessageHeaderEncoder();
     private final MessageHeaderDecoder messageHeaderDecoder = new MessageHeaderDecoder();
