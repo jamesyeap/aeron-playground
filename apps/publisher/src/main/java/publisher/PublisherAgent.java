@@ -6,6 +6,7 @@ import com.aeronplayground.sbe.MessageHeaderDecoder;
 import com.aeronplayground.sbe.MessageHeaderEncoder;
 import io.aeron.*;
 import io.aeron.archive.client.AeronArchive;
+import io.aeron.archive.client.ArchiveException;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
 import io.aeron.archive.codecs.SourceLocation;
 import io.aeron.logbuffer.FragmentHandler;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static io.aeron.CommonContext.ENDPOINT_PARAM_NAME;
@@ -29,7 +31,7 @@ public class PublisherAgent implements Agent {
     private long count = 0;
     private Aeron aeron;
     private Publication publication;
-    private long recordingId = -1;
+    private Optional<Long> recordingId;
     private AeronArchive archiveClient;
     private Config config;
     private volatile int intervalInMs;
@@ -94,15 +96,15 @@ public class PublisherAgent implements Agent {
         }
 
         // request for Aeron Archive to start recording
-        recordingId = startOrExtendRecording(recordingIDList, config.getAeronChannel(), config.getAeronStream());
+        recordingId = Optional.of(startOrExtendRecording(recordingDetailsList, config.getAeronChannel(), config.getAeronStream()));
 
         // if there was no previous recording, we can just create a vanilla publication
-        if (recordingIDList.isEmpty()) {
+        if (recordingDetailsList.isEmpty()) {
             publication = aeron.addPublication(config.getAeronChannel(), config.getAeronStream());
 
         } else {
             // otherwise, we should extend the last recording - to create a publication based on the last recording, we need to do this as we want to extend the last recording, and to do so the publication must match with the recording.
-            RecordingDetails detailsOfLastRecording = recordingIDList.getLast();
+            RecordingDetails detailsOfLastRecording = recordingDetailsList.getLast();
             final ChannelUri recordedUri = ChannelUri.parse(detailsOfLastRecording.originalChannel());
             final ChannelUriStringBuilder builder = new ChannelUriStringBuilder()
                     .media(recordedUri)
@@ -135,7 +137,7 @@ public class PublisherAgent implements Agent {
     public void onClose() {
         // when the publisher shuts down, request the archive client to stop recording
         LOGGER.info("Publisher shutting down - requesting Aeron Archive to stop recording for subscription ID: {}\n", recordingId);
-        archiveClient.stopRecording(recordingId);
+        stopRecording();
         publication.close();
 
         while (!publication.isClosed()) {
@@ -205,12 +207,24 @@ public class PublisherAgent implements Agent {
     public Publication getPublication() {
         return publication;
     }
+
     public AeronArchive getArchiveClient() {
         return archiveClient;
     }
 
     public Config getConfig() {
         return config;
+    }
+
+    public boolean stopRecording() {
+        boolean result = recordingId.map(id -> {
+            archiveClient.stopRecording(id);
+            return true;
+        }).orElse(false);
+
+        recordingId = Optional.empty();
+
+        return result;
     }
 
     private long startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int replayStream) throws InterruptedException {
@@ -255,7 +269,12 @@ public class PublisherAgent implements Agent {
 
     private long startOrExtendRecording(List<RecordingDetails> recordingIDList, String aeronChannel, int aeronStream) {
         if (!recordingIDList.isEmpty()) {
-            return archiveClient.extendRecording(recordingIDList.getLast().recordingId(), aeronChannel, aeronStream, SourceLocation.REMOTE);
+            try {
+                return archiveClient.extendRecording(recordingIDList.getLast().recordingId(), aeronChannel, aeronStream, SourceLocation.REMOTE);
+            } catch (ArchiveException exception) {
+                LOGGER.warn("Starting new recording instead of extending recording - Failed to extend recording due to error: ", exception);
+                return archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
+            }
         }
 
         return archiveClient.startRecording(aeronChannel, aeronStream, SourceLocation.REMOTE);
