@@ -9,10 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.shell.core.ShellRunner;
-import org.springframework.shell.core.command.annotation.Argument;
-import org.springframework.shell.core.command.annotation.Command;
-import org.springframework.shell.core.command.annotation.EnableCommand;
-import org.springframework.shell.core.command.annotation.Option;
+import org.springframework.shell.core.command.annotation.*;
 
 /**
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
@@ -51,11 +48,22 @@ public class Publisher {
         System.out.println("Hello " + name + "!");
     }
 
-    @Command(name = "interval", description = "Set the interval between messages sent by the publisher, in milliseconds.", group = "Message")
-    public void interval(
-            @Argument(index = 0, description = "interval, in milliseconds", defaultValue = "500") int interval
-    ) {
-        LOGGER.info("Setting message interval to: {} ms", interval);
-        agent.setIntervalInMs(interval);
+    @CommandGroup(name = "Interval Commands", prefix = "interval")
+    private static final class IntervalCommands {
+        @Command(name = "set", description = "Set the interval between messages sent by the publisher, in milliseconds.")
+        public String interval(
+                @Argument(index = 0, description = "interval, in milliseconds", defaultValue = "500") int interval
+        ) {
+            agent.setIntervalInMs(interval);
+            String output = String.format("Setting message interval to: %s ms", interval);
+            LOGGER.info(output);
+            return output;
+        }
+
+        @Command(name = "show", description = "Set the interval between messages sent by the publisher, in milliseconds.")
+        public String show(
+        ) {
+            return String.format("Current message interval: %s ms", agent.getIntervalInMs());
+        }
     }
 }

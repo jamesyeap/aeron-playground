@@ -186,6 +186,10 @@ public class PublisherAgent implements Agent {
         return 1;
     }
 
+    public int getIntervalInMs() {
+        return this.intervalInMs;
+    }
+
     public void setIntervalInMs(int intervalInMs) {
         this.intervalInMs = intervalInMs;
 
