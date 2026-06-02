@@ -16,6 +16,7 @@ REPLAY_CONTROL_REQUEST_CHANNEL="aeron:udp?endpoint=localhost:8010"
 REPLAY_CONTROL_REQUEST_STREAM="52"
 REPLAY_CONTROL_RESPONSE_CHANNEL="aeron:udp?endpoint=localhost:0"
 REPLAY_CONTROL_RESPONSE_STREAM="53"
+INTERVAL_IN_MS="50"
 
 # === START ===
 exec ${JAVA_HOME}/bin/java \
@@ -28,6 +29,7 @@ exec ${JAVA_HOME}/bin/java \
     -DaeronPlayground.controlRequestStream=${REPLAY_CONTROL_REQUEST_STREAM} \
     -DaeronPlayground.controlResponseChannel=${REPLAY_CONTROL_RESPONSE_CHANNEL} \
     -DaeronPlayground.controlResponseStream=${REPLAY_CONTROL_RESPONSE_STREAM} \
+    -DaeronPlayground.intervalInMs=${INTERVAL_IN_MS} \
     ${ADD_OPENS} \
     ${VM_OPTIONS} \
     publisher.Publisher

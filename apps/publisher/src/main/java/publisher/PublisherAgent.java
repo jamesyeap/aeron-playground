@@ -31,6 +31,7 @@ public class PublisherAgent implements Agent {
     private Publication publication;
     private long recordingId = -1;
     private AeronArchive archiveClient;
+    private int intervalInMs = 500;
 
     private final MessageHeaderEncoder messageHeaderEncoder = new MessageHeaderEncoder();
     private final MessageHeaderDecoder messageHeaderDecoder = new MessageHeaderDecoder();
@@ -57,6 +58,9 @@ public class PublisherAgent implements Agent {
         int controlRequestStream = Integer.parseInt(System.getProperty("aeronPlayground.controlRequestStream"));
         String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
         int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
+
+        // config for how often to send a new message
+        intervalInMs = Integer.parseInt(System.getProperty("aeronPlayground.intervalInMs", "500"));
 
         // create the buffer that we will write messages to
         buffer = new UnsafeBuffer(BufferUtil.allocateDirectAligned(512, BitUtil.CACHE_LINE_LENGTH));
@@ -157,7 +161,7 @@ public class PublisherAgent implements Agent {
         }
 
         clock.update(currentTime);
-        clock.advance(TimeUnit.SECONDS.toMillis(1));
+        clock.advance(TimeUnit.MILLISECONDS.toMillis(intervalInMs));
 
         // put the message into the buffer
         counterValueEncoder.wrapAndApplyHeader(buffer, 0, messageHeaderEncoder);
