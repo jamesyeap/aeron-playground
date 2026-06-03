@@ -15,6 +15,8 @@ import org.agrona.concurrent.IdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class SubscriberAgent implements Agent {
@@ -65,21 +67,19 @@ public class SubscriberAgent implements Agent {
         String controlResponseChannel = System.getProperty("aeronPlayground.controlResponseChannel");
         int controlResponseStream = Integer.parseInt(System.getProperty("aeronPlayground.controlResponseStream"));
 
-        // create the configuration
+        // connect to the Media Driver
         final Aeron.Context ctx = new Aeron.Context().aeronDirectoryName(aeronDir);
+        aeron = Aeron.connect(ctx);
 
-        // create the config for the client to Aeron archive
+        // connect to the Aeron Archiver
         AeronArchive.Context archiveCtx = new AeronArchive.Context()
                 .aeronDirectoryName(aeronDir)
                 .controlRequestChannel(controlRequestChannel)
                 .controlRequestStreamId(controlRequestStream)
                 .controlResponseChannel(controlResponseChannel)
                 .controlResponseStreamId(controlResponseStream);
-
-        // connect to the media driver using the configuration
-        aeron = Aeron.connect(ctx);
-        subscription = aeron.addSubscription(aeronChannel, aeronStream);
         archive = AeronArchive.connect(archiveCtx);
+
 
         // create handler that contains the business logic
         fragmentHandler = (buffer, offset, length, header) -> {
@@ -93,50 +93,39 @@ public class SubscriberAgent implements Agent {
             LOGGER.info("Received value: {}\n", value);
         };
 
-        // wait for subscriber to start
         if (!shouldReplay) {
-            // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
-            while (!subscription.isConnected()) {
-                LOGGER.info("Waiting for publisher...");
-                try {
-                    Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            subscription = aeron.addSubscription(aeronChannel, aeronStream);
         } else {
-            long lastRecordingId = getLastRecordingId(archive, aeronChannel, aeronStream);
-            LOGGER.info("Last recording ID: {}\n", lastRecordingId);
+            List<RecordingDetails> recordingDetailsList = getRecordingDetails();
+            if (recordingDetailsList.isEmpty()) {
+                LOGGER.info("No recordings found! Subscribing to stream directly.");
+                subscription = aeron.addSubscription(aeronChannel, aeronStream);
+            } else {
+                LOGGER.info("Found list of recordings: {}\n", recordingDetailsList);
 
-            if (lastRecordingId >= 0) {
-                // otherwise, request the archiver to start replaying on the given channel and stream
-                final long sessionId = archive.startReplay(lastRecordingId, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, replayStream);
+                RecordingDetails recordingDetails = recordingDetailsList.getLast();
+                LOGGER.info("Using the last recording: {}\n", recordingDetails);
+                final long sessionId = archive.startReplay(recordingDetails.recordingId(), AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, replayStream);
                 String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
-                Subscription replaySubscription = aeron.addSubscription(replayChannel, replayStream);
-
-                // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
-                while (!replaySubscription.isConnected()) {
-                    LOGGER.info("Waiting for replay subscription...");
-
-                    try {
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-
-                replay(replaySubscription, fragmentHandler, fragmentLimit, idleStrategy);
+                subscription = aeron.addSubscription(replayChannel, replayStream);
             }
         }
+
     }
 
     @Override
     public int doWork() throws Exception {
-        if (shouldProcess) {
-            return subscription.poll(fragmentHandler, fragmentLimit);
-        } else {
+        if (!shouldProcess) {
             return 0;
         }
+
+        // note: this is optional - we don't have to wait for the subscription to be connected for the SUBSCRIBER - this is only compulsory for the PUBLISHER
+        if (!subscription.isConnected()) {
+            LOGGER.info("Waiting for publisher...");
+            return 0;
+        }
+
+        return subscription.poll(fragmentHandler, fragmentLimit);
     }
 
     @Override
@@ -157,30 +146,15 @@ public class SubscriberAgent implements Agent {
         this.shouldProcess = shouldProcess;
     }
 
-    private static void replay(Subscription subscription, FragmentHandler fragmentHandler, int fragmentLimit, IdleStrategy idleStrategy) {
-        while (true) {
-            final int numFragmentsRead = subscription.poll(fragmentHandler, fragmentLimit);
-            if (numFragmentsRead == 0) {
-                break;
-            }
-
-            // idle before polling again
-            idleStrategy.idle(numFragmentsRead);
-        }
-    }
-
-    private static long getLastRecordingId(AeronArchive archiveClient, String aeronChannel, int aeronStream) {
-        MutableLong lastRecordingId = new MutableLong();
+    private List<RecordingDetails> getRecordingDetails() {
+        // look through all the recordings that the archiver has for the channel and stream
+        List<RecordingDetails> recordingDetailsList = new ArrayList<>();
         RecordingDescriptorConsumer consumer = (controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity) -> {
-            lastRecordingId.set(recordingId);
+            recordingDetailsList.add(new RecordingDetails(controlSessionId, correlationId, recordingId, startTimestamp, stopTimestamp, startPosition, stopPosition, initialTermId, segmentFileLength, termBufferLength, mtuLength, sessionId, streamId, strippedChannel, originalChannel, sourceIdentity));
         };
 
-        // list the recordings that the archiver has for the channel and stream
-        final int foundCount = archiveClient.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
-        if (foundCount == 0) {
-            return -1;
-        }
+        archive.listRecordingsForUri(0L, 100, aeronChannel, aeronStream, consumer);
 
-        return lastRecordingId.get();
+        return recordingDetailsList;
     }
 }
