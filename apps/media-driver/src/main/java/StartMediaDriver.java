@@ -18,11 +18,13 @@ public class StartMediaDriver {
     public static void main(String[] args) {
         //  -DaeronPlayground.dir=/tmp/media-driver-1
         String aeronDir = System.getProperty("aeronPlayground.dir");
+        int termBufferLength = Integer.parseInt(System.getProperty("aeronPlayground.term.buffer.length", "65536"));
 
         // create the config for the media driver
         final MediaDriver.Context mediaDriverCtx = new MediaDriver.Context()
                 .aeronDirectoryName(aeronDir)
                 .sharedIdleStrategy(new BusySpinIdleStrategy())
+                .publicationTermBufferLength(termBufferLength)
                 .threadingMode(ThreadingMode.DEDICATED);
 
         // start the media driver

@@ -10,3 +10,7 @@ tasks.named('shadowJar') {
         attributes 'Main-Class': 'subscriber.Subscriber'
     }
 }
+
+dependencies {
+    implementation 'org.springframework.shell:spring-shell-core:4.0.2'
+}

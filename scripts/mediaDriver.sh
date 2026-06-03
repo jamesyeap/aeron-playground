@@ -9,6 +9,7 @@ source "${SCRIPT_DIR}/common.sh"
 
 # === CONFIG ===
 AERON_DIR="/tmp/media-driver-1"
+AERON_TERM_BUFFER_LENGTH_IN_BYTES="65536"
 AERON_DEBUG_LOG_FILE="${REPO_ROOT}/logs/mediaDriverDebug.log"
 
 # === DEBUG LOGGING FOR AERON ===
@@ -22,6 +23,7 @@ AERON_DEBUG_LOGGING_PROPS=(
 exec ${JAVA_HOME}/bin/java \
     -cp "${REPO_ROOT}/apps/media-driver/build/libs/media-driver-1.0-SNAPSHOT-all.jar" \
     -DaeronPlayground.dir=${AERON_DIR} \
+    -DaeronPlayground.term.buffer.length=${AERON_TERM_BUFFER_LENGTH_IN_BYTES} \
     ${ADD_OPENS} \
     ${VM_OPTIONS} \
     "${AERON_DEBUG_LOGGING_PROPS[@]}" \

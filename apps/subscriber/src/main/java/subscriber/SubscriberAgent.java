@@ -8,6 +8,7 @@ import io.aeron.Subscription;
 import io.aeron.archive.client.AeronArchive;
 import io.aeron.archive.client.RecordingDescriptorConsumer;
 import io.aeron.logbuffer.FragmentHandler;
+import org.agrona.CloseHelper;
 import org.agrona.collections.MutableLong;
 import org.agrona.concurrent.Agent;
 import org.agrona.concurrent.IdleStrategy;
@@ -25,6 +26,7 @@ public class SubscriberAgent implements Agent {
     int aeronStream;
 
     private Aeron aeron;
+
     private Subscription subscription;
     private AeronArchive archive;
     private IdleStrategy idleStrategy;
@@ -35,6 +37,9 @@ public class SubscriberAgent implements Agent {
 
     private boolean shouldReplay = false;
     int fragmentLimit = 10; // TODO: not sure what fragment limit is
+
+    // used to momentarily pause processing of messages from subscription, to see how backpressure works
+    private volatile boolean shouldProcess = true;
 
     public SubscriberAgent(IdleStrategy idleStrategy) {
         this.idleStrategy = idleStrategy;
@@ -127,13 +132,29 @@ public class SubscriberAgent implements Agent {
 
     @Override
     public int doWork() throws Exception {
-        return subscription.poll(fragmentHandler, fragmentLimit);
+        if (shouldProcess) {
+            return subscription.poll(fragmentHandler, fragmentLimit);
+        } else {
+            return 0;
+        }
     }
 
     @Override
     public void onClose() {
-        subscription.close();
         LOGGER.info("Shutting down subscriber - closing subscription: {}\n", subscription);
+        CloseHelper.closeAll(subscription, aeron, archive);
+    }
+
+    public Subscription getSubscription() {
+        return subscription;
+    }
+
+    public boolean isShouldProcess() {
+        return shouldProcess;
+    }
+
+    public void setShouldProcess(boolean shouldProcess) {
+        this.shouldProcess = shouldProcess;
     }
 
     private static void replay(Subscription subscription, FragmentHandler fragmentHandler, int fragmentLimit, IdleStrategy idleStrategy) {

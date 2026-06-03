@@ -16,11 +16,10 @@ import java.util.List;
 /**
  * A simple publisher that connects to a `channel`, and pushes a message to a `stream` once every second.
  */
-@EnableCommand({Publisher.class, Publisher.IntervalCommands.class, Publisher.ArchiveCommands.class, Publisher.AeronPublicationCommands.class})
+@EnableCommand({Publisher.IntervalCommands.class, Publisher.ArchiveCommands.class, Publisher.AeronPublicationCommands.class})
 public class Publisher {
     private static final Logger LOGGER = LoggerFactory.getLogger(Publisher.class);
 
-    private static final AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(Publisher.class);
     private static final PublisherAgent agent = new PublisherAgent();
 
     public static void main(String[] args) throws Exception {
@@ -30,6 +29,7 @@ public class Publisher {
         AgentRunner.startOnThread(agentRunner);
 
         // start up an interactive console for us to interact with the publisher app as its running
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(Publisher.class);
         ShellRunner runner = context.getBean(ShellRunner.class);
         try {
             runner.run(args);
@@ -37,17 +37,6 @@ public class Publisher {
             CloseHelper.closeAll(agentRunner, context);
             LogManager.shutdown();
         }
-    }
-
-    @Command(name = "hello", description = "Say hello to a given name", group = "Greetings",
-            help = "A command that greets the user with 'Hello ${name}!'. Usage: hello [-n | --name]=<name>")
-    public void sayHello(
-            @Option(shortName = 'n',
-                    longName = "name",
-                    description = "the name of the person to greet",
-                    defaultValue = "World") String name
-    ) {
-        System.out.println("Hello " + name + "!");
     }
 
     @CommandGroup(name = "Interval Commands", prefix = "interval")
