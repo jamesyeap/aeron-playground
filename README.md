@@ -108,3 +108,8 @@ So when a Publisher starts up, it needs a way to identify which recording belong
 - one approach would be to write the `SessionId` to disk - on startup, the Publisher queries for Recording(s) (ideally
   there should only be one, as Recordings should be extended where possible) that were tracking its previous session.
 - as `SessionId` is guaranteed to be unique on each node, no two Publishers will request to extend the same Recording.
+
+# Interesting resources
+- [The Aeron File](https://theaeronfiles.com/overview/)
+  - unofficial documentation on Aeron written by Chris Smith
+    - which deep-dives into the internals of Aeron Transport, Aeron Archive and Aeron Cluster
