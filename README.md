@@ -51,6 +51,15 @@ The subscriber just prints the value in each message to lgos.
 | `p stop`  | Stop processing messages from the subscription.   |
 | `p show`  | Show status.                                      |
 
+# Starting the components
+Run `./gradlew build` to build the project.
+
+Then, run all the scripts in `scripts` in this order:
+- `scripts/mediaDriver.sh`
+- `scripts/archiver.sh`
+- `scripts/publisher.sh`
+- `scripts/subscriber.sh`
+
 # Interesting things to explore
 ## Backpressure
 To explore how Aeron handles backpressure, you can
