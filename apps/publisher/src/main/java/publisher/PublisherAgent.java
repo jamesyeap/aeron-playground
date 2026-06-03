@@ -88,7 +88,7 @@ public class PublisherAgent implements Agent {
         List<RecordingDetails> recordingDetailsList = getListOfRecordings();
         for (RecordingDetails recordingDetails : recordingDetailsList) {
             try {
-                count = startReplay(recordingDetails.recordingId(), aeron, archiveClient, config.getAeronChannel(), config.getReplayStream());
+                count = startReplay(recordingDetails, aeron, archiveClient, config.getAeronChannel(), config.getReplayStream());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
@@ -227,8 +227,8 @@ public class PublisherAgent implements Agent {
         return result;
     }
 
-    private long startReplay(long recordingID, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int replayStream) throws InterruptedException {
-        final long sessionId = archiveClient.startReplay(recordingID, AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_FOLLOW, aeronChannel, replayStream);
+    private long startReplay(RecordingDetails recordingDetails, Aeron aeron, AeronArchive archiveClient, String aeronChannel, int replayStream) throws InterruptedException {
+        final long sessionId = archiveClient.startReplay(recordingDetails.recordingId(), AeronArchive.NULL_POSITION, AeronArchive.REPLAY_ALL_AND_STOP, aeronChannel, replayStream);
         String replayChannel = ChannelUri.addSessionId(aeronChannel, (int) sessionId);
         Subscription replaySubscription = aeron.addSubscription(replayChannel, replayStream);
         while (!replaySubscription.isConnected()) {
@@ -237,7 +237,10 @@ public class PublisherAgent implements Agent {
         }
 
         MutableLong latestCount = new MutableLong();
+        MutableLong replayedMessagePosition = new MutableLong();
         FragmentHandler fragmentHandler = (directBuffer, offset, length, header) -> {
+            replayedMessagePosition.set(header.position());
+
             messageHeaderDecoder.wrap(directBuffer, offset);
             counterValueDecoder.wrap(directBuffer, offset + messageHeaderDecoder.encodedLength(),
                     messageHeaderDecoder.blockLength(),
@@ -254,11 +257,8 @@ public class PublisherAgent implements Agent {
         IdleStrategy idleStrategy = new BusySpinIdleStrategy();
 
         // start replay
-        while (true) {
-            final int numFragmentsRead = replaySubscription.poll(fragmentHandler, fragmentLimit);
-            if (numFragmentsRead == 0) {
-                break;
-            }
+        while (replayedMessagePosition.get() < recordingDetails.stopPosition()) {
+            int numFragmentsRead = replaySubscription.poll(fragmentHandler, fragmentLimit);
 
             // idle before polling again
             idleStrategy.idle(numFragmentsRead);

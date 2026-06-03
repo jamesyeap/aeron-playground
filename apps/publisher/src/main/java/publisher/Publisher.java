@@ -39,7 +39,7 @@ public class Publisher {
         }
     }
 
-    @CommandGroup(name = "Interval Commands", prefix = "interval")
+    @CommandGroup(name = "Interval Commands", prefix = "i")
     public static final class IntervalCommands {
         @Command(name = "set", description = "Set the interval between messages sent by the publisher, in milliseconds.")
         public String interval(
@@ -58,7 +58,7 @@ public class Publisher {
         }
     }
 
-    @CommandGroup(name = "Aeron Client Publication Commands", prefix = "publication")
+    @CommandGroup(name = "Aeron Client Publication Commands", prefix = "p")
     public static final class AeronPublicationCommands {
         @Command(name = "list", description = "List all Aeron publications.")
         public String listAeronPublications() {
@@ -66,7 +66,7 @@ public class Publisher {
         }
     }
 
-    @CommandGroup(name = "Archive Client Commands", prefix = "archive")
+    @CommandGroup(name = "Archive Client Commands", prefix = "a")
     public static final class ArchiveCommands {
         @Command(name = "list", description = "List all archive recordings for the current published stream.")
         public String listArchiveRecordings() {
