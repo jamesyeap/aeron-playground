@@ -93,3 +93,18 @@ Check the Aeron counter stats using the tools scripts:
 ```
 
 - note that there will be two subscribers to stream 51: the Subscriber itself, and Aeron Archive
+
+# Nuances
+
+Note that in this setup, there is only a single Publisher publishing to (channel:`localhost:12345`, stream:`51`), so
+extending the archive Recording is straightforward.
+
+However, if there are multiple Publishers to the same channel and stream, things can get a bit more complicated:
+
+- at each time, there can only be a single Publisher writing to a Recording (a Recording cannot track two Sessions)
+
+So when a Publisher starts up, it needs a way to identify which recording belonged to it.
+
+- one approach would be to write the `SessionId` to disk - on startup, the Publisher queries for Recording(s) (ideally
+  there should only be one, as Recordings should be extended where possible) that were tracking its previous session.
+- as `SessionId` is guaranteed to be unique on each node, no two Publishers will request to extend the same Recording.
