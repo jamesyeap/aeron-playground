@@ -12,17 +12,56 @@ It has 4 main classes:
 ## StartMediaDriver
 Creates an Aeron Media Driver, with the `aeronDir` set to `/tmp/media-driver-1`.
 
+The term buffer length is configurable in `mediaDriver.sh`.
+
 ## StartArchiver
 Creates an Aeron Archive, with the `archiveDir` set to `/tmp/archive-media-driver-1`
 
 ## Publisher
-Initializes a counter to 0 - every second, it:
+Initializes a counter to `0` - at each time interval (configurable via CLI, default is `1 second`), it:
+- Sends the value of the counter to (channel:`localhost:12345`, stream:`51`).
+- Then it increments the counter by 1.
 
-- Sends the value of the counter to a channel `localhost:12345`, stream `51`.
-- Increments the counter by 1.
+### Redundancy
+If the publisher is restarted, it fetches all the values that it has previously sent from the Aeron Archive, and initializes the counter to the latest value that it previously sent (instead of `0`).
 
-Note: if the publisher is restarted, it fetches all the values that it has previously sent from the Aeron Archive, and
-initializes the counter to the latest value that it previously sent (instead of 0).
+On startup, the publisher requests the Aeron Archive to start or extend a recording on (channel:`localhost:12345`, stream:`51`).
+- This recording will be replayed by both the Publisher and Subscriber on startup to get the latest state.
+
+
+### Commands
+| Command  | Description                                        |
+|----------|----------------------------------------------------|
+| `p list` | Show all publications                              |
+| `i set`  | Set the message publishing rate, in milliseconds.  |
+| `i show` | Show the message publishing rate, in milliseconds. |
 
 ## Subscriber
-Receives the value of the counter from the channel at `localhost:12345`, stream `51`, and prints it to logs.
+On startup, the subscriber checks if Aeron Archive has any recordings from (channel:`localhost:12345`, stream:`51`).
+- If it does, it requests a replay from the Aeron Archive, and then creates a `replay merge` subscription.
+- Otherwise, it just creates a plain subscription to the stream.
+
+The subscriber just prints the value in each message to lgos.
+
+### Commands
+| Command   | Description                                       |
+|-----------|---------------------------------------------------|
+| `s show`  | Show the details of the subscription              |
+| `p start` | Resume processing messages from the subscription. |
+| `p stop`  | Stop processing messages from the subscription.   |
+| `p show`  | Show status.                                      |
+
+# Interesting things to explore
+## Backpressure
+To explore how Aeron handles backpressure, you can
+- Stop the Subscriber from processing messages with `p stop`.
+- Increase the message publishing rate in the Publisher with `i set 50`
+
+Check the Aeron counter stats using the tools scripts:
+
+```bash
+./aeronStat.sh /tmp/media-driver-1
+./streamStat.sh /tmp/media-driver-1 | grep streamId=51
+./backlogStat.sh /tmp/media-driver-1
+```
+- note that there will be two subscribers to stream 51: the Subscriber itself, and Aeron Archive
